@@ -55,6 +55,7 @@ __all__ = [
     "normalize_job_id",
     "normalize_opaque_id",
     "normalize_person_identifier",
+    "normalize_post_url",
     "normalize_profile_urn",
     "normalize_thread_id",
     "person_profile_url",
@@ -141,6 +142,15 @@ _THREAD_ROUTE = ("messaging", "thread")
 # one here extracts ``\d+``, and anything else navigates to a 404 that costs a
 # page load to discover.
 _NUMERIC_ID = re.compile(r"^[0-9]+$")
+
+# A post permalink comes in two shapes, and LinkedIn serves both: the
+# `/feed/update/<urn>/` form the DOM anchors carry and the `/posts/<slug>` form
+# the feed payload carries (see `references["feed"]` in AGENTS.md). The urn
+# kinds are the three a post permalink is issued under.
+_POST_URN = re.compile(r"^urn:li:(?:activity|share|ugcPost):[0-9]+$")
+_POST_SLUG = re.compile(r"^[\w.-]+$")
+_FEED_UPDATE_ROUTE = ("feed", "update")
+_POSTS_ROUTE = "posts"
 
 _PROFILE_URN_PREFIX = "urn:li:fsd_profile:"
 _PROFILE_URN_ID = re.compile(r"^[A-Za-z0-9_-]+$")
@@ -490,3 +500,44 @@ def normalize_profile_urn(value: str) -> str:
             "result returned it, with no URL, path or query around it."
         )
     return value
+
+
+def normalize_post_url(value: str) -> str:
+    """The absolute permalink for a post, from either permalink shape or a urn.
+
+    Accepts ``/feed/update/<urn>/`` and ``/posts/<slug>`` as full URLs or
+    site-relative paths, and a bare ``urn:li:activity|share|ugcPost:<id>``. The
+    result keeps the shape it was given, because a slug does not carry the urn
+    and the urn does not carry the slug; both are pages LinkedIn serves.
+
+    Raises:
+        InvalidReferenceError: for anything that is not a post permalink. Acting
+            on the wrong page is the cost of guessing here, and for a write
+            that means reacting to or commenting on some other post.
+    """
+    value = value.strip()
+    refusal = InvalidReferenceError(
+        "That is not a LinkedIn post link. Pass a post permalink "
+        '("/feed/update/urn:li:activity:<id>/" or "/posts/<slug>") or the '
+        "post's urn, exactly as get_feed or search_posts returned it."
+    )
+    if not value:
+        raise refusal
+
+    urn = _decoded(value)
+    if urn is not None and _POST_URN.match(urn):
+        return f"https://www.linkedin.com/feed/update/{urn}/"
+
+    segments = _linkedin_segments(value, want="post permalink")
+    if segments is None or len(segments) < 2:
+        raise refusal
+    route = [segment.lower() for segment in segments]
+    if tuple(route[:2]) == _FEED_UPDATE_ROUTE and len(segments) == 3:
+        urn = _usable(segments[2])
+        if urn is not None and _POST_URN.match(urn):
+            return f"https://www.linkedin.com/feed/update/{urn}/"
+    elif route[0] == _POSTS_ROUTE and len(segments) == 2:
+        slug = _identifier(segments[1], _POST_SLUG)
+        if slug is not None:
+            return f"https://www.linkedin.com/posts/{quote(slug, safe='')}"
+    raise refusal

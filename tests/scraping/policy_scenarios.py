@@ -19,6 +19,7 @@ from patchright.async_api import TimeoutError as PlaywrightTimeoutError
 from linkedin_mcp_server.callbacks import ProgressCallback
 from linkedin_mcp_server.scraping import capture as capture_module
 from linkedin_mcp_server.scraping import company as company_module
+from linkedin_mcp_server.scraping import engage_actions as engage_module
 from linkedin_mcp_server.scraping import feed as feed_module
 from linkedin_mcp_server.scraping import job_pages as job_pages_module
 from linkedin_mcp_server.scraping import jobs as jobs_module
@@ -956,6 +957,114 @@ async def _connect_scenario() -> dict[str, Any]:
     )
 
 
+async def _connection_state_scenario() -> dict[str, Any]:
+    name = "get_connection_state__self_profile"
+    recorder = TraceRecorder(name, _COMMON_ALLOWED)
+    clock = FakeClock(recorder)
+    page = _page(recorder)
+    page.script("evaluate:root_content", _root("Own profile"))
+    _script_profile_target(page, "unavailable")
+    page.script(
+        "evaluate:connection_action_signals",
+        {
+            "hasInvite": False,
+            "hasComposeInActionRoot": False,
+            "hasEditIntro": True,
+            "hasLabeledActionButton": True,
+            "hasLabeledActionAnchor": False,
+            "hasIncomingActionRow": False,
+        },
+    )
+    extractor = _extractor(page)
+    async with boundaries(recorder, clock):
+        with recorder.context("get_connection_state", "main_profile"):
+            result = await extractor.get_connection_state("ada-lovelace")
+    page.assert_clean()
+    return recorder.trace(
+        {"method": "get_connection_state", "arguments": {"username": "ada-lovelace"}},
+        result,
+    )
+
+
+_POST_URL = "https://www.linkedin.com/feed/update/urn:li:activity:7123456789012345678/"
+
+
+async def _post_author_scenario() -> dict[str, Any]:
+    name = "get_post_author__member"
+    recorder = TraceRecorder(name, _COMMON_ALLOWED)
+    clock = FakeClock(recorder)
+    page = _page(recorder).script(
+        "evaluate:post_author",
+        {"kind": "in", "slug": "ada-lovelace", "name": "Ada Lovelace"},
+    )
+    extractor = _extractor(page)
+    async with boundaries(recorder, clock):
+        with recorder.context("get_post_author", "post"):
+            result = await extractor.get_post_author(_POST_URL)
+    page.assert_clean()
+    return recorder.trace(
+        {"method": "get_post_author", "arguments": {"post_url": _POST_URL}},
+        result,
+    )
+
+
+async def _react_scenario() -> dict[str, Any]:
+    # The one path that ends without a click: the requested reaction is
+    # already the post's reaction. The trigger is still validated first: the
+    # one candidate is tagged, then hovered by its tag until its reactions
+    # menu shows. The tag's token is pinned so the trace is deterministic.
+    name = "react_to_post__already_reacted"
+    recorder = TraceRecorder(name, _COMMON_ALLOWED | {"locator.hover"})
+    clock = FakeClock(recorder)
+    page = _page(recorder)
+    page.script("evaluate:post_trigger_candidates", ["trace-0"])
+    page.declare_locator('main button[data-engage-ref="trace-0"]', "react_trigger")
+    page.script("react_trigger.hover", None)
+    page.script("evaluate:post_reaction_menu_open", True)
+    page.script(
+        "evaluate:post_reaction_state",
+        {"hasTrigger": True, "pressed": True, "currentType": "PRAISE"},
+    )
+    extractor = _extractor(page)
+    async with boundaries(recorder, clock):
+        with (
+            patch.object(engage_module, "_new_token", return_value="trace"),
+            recorder.context("react_to_post", "post"),
+        ):
+            result = await extractor.react_to_post(_POST_URL, "celebrate")
+    page.assert_clean()
+    return recorder.trace(
+        {
+            "method": "react_to_post",
+            "arguments": {"post_url": _POST_URL, "reaction": "celebrate"},
+        },
+        result,
+    )
+
+
+async def _comment_scenario() -> dict[str, Any]:
+    # A post LinkedIn no longer serves lands on the feed, whose first react
+    # trigger belongs to another post. The route check stops before any
+    # control is looked for.
+    name = "comment_on_post__redirected_away"
+    recorder = TraceRecorder(name, _COMMON_ALLOWED)
+    clock = FakeClock(recorder)
+    page = _page(recorder)
+    page.goto_landings.append("https://www.linkedin.com/feed/")
+    extractor = _extractor(page)
+    async with boundaries(recorder, clock):
+        with recorder.context("comment_on_post", "post"):
+            result = await extractor.comment_on_post(_POST_URL, "Useful point.")
+    page.assert_clean()
+    return recorder.trace(
+        {
+            "method": "comment_on_post",
+            "arguments": {"post_url": _POST_URL, "text": "Useful point."},
+        },
+        result,
+    )
+
+
 async def _sidebar_scenario() -> dict[str, Any]:
     name = "get_sidebar_profiles__baseline"
     recorder = TraceRecorder(name, _COMMON_ALLOWED)
@@ -1078,15 +1187,19 @@ async def _facade_contract_trace() -> dict[str, Any]:
 
 
 TOOL_FACADE_METHODS = {
+    "comment_on_post",
     "connect_with_person",
     "extract_feed",
     "extract_page",
     "get_company_employees",
+    "get_connection_state",
     "get_conversation",
     "get_inbox",
     "get_my_profile",
+    "get_post_author",
     "get_saved_jobs",
     "get_sidebar_profiles",
+    "react_to_post",
     "scrape_company",
     "scrape_job",
     "scrape_person",
@@ -1156,6 +1269,10 @@ async def build_policy_traces() -> dict[str, dict[str, Any]]:
         "message-c0.json": await _invalid_message_scenario("line\nbreak", "c0"),
         "message-del.json": await _invalid_message_scenario("text\x7f", "del"),
         "connect.json": await _connect_scenario(),
+        "connection-state.json": await _connection_state_scenario(),
+        "post-author.json": await _post_author_scenario(),
+        "react-already-reacted.json": await _react_scenario(),
+        "comment-redirected.json": await _comment_scenario(),
         "get-my-profile.json": await _get_my_profile_scenario(),
         "sidebar-profiles.json": await _sidebar_scenario(),
         "company-employees.json": await _single_capture_facade_scenario(

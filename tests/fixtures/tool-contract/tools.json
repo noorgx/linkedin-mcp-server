@@ -27,6 +27,44 @@
     "_meta": {
       "fastmcp": {
         "tags": [
+          "engage"
+        ]
+      }
+    },
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": true
+    },
+    "description": "Post a top-level comment on a LinkedIn post. This is a write operation.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "post_url": {
+          "description": "Post permalink, \"/feed/update/<urn>/\" or \"/posts/<slug>\",\nas a full URL or a relative path, or the post's urn",
+          "type": "string"
+        },
+        "text": {
+          "description": "Single-line comment text, posted exactly as given. No mention\nor hashtag suggestion is accepted. C0 control characters and\nDEL are rejected, including CR, LF and tab.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "post_url",
+        "text"
+      ],
+      "type": "object"
+    },
+    "name": "comment_on_post",
+    "outputSchema": {
+      "additionalProperties": true,
+      "type": "object"
+    },
+    "title": "Comment On Post"
+  },
+  {
+    "_meta": {
+      "fastmcp": {
+        "tags": [
           "actions",
           "person"
         ]
@@ -205,6 +243,39 @@
       "type": "object"
     },
     "title": "Get Company Profile"
+  },
+  {
+    "_meta": {
+      "fastmcp": {
+        "tags": [
+          "engage"
+        ]
+      }
+    },
+    "annotations": {
+      "openWorldHint": true,
+      "readOnlyHint": true
+    },
+    "description": "Read the connection state with a person without clicking anything.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "linkedin_username": {
+          "description": "LinkedIn username (e.g., \"stickerdaniel\"). A full\nprofile URL is accepted too and is reduced to the username.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "linkedin_username"
+      ],
+      "type": "object"
+    },
+    "name": "get_connection_state",
+    "outputSchema": {
+      "additionalProperties": true,
+      "type": "object"
+    },
+    "title": "Get Connection State"
   },
   {
     "_meta": {
@@ -475,6 +546,39 @@
     "_meta": {
       "fastmcp": {
         "tags": [
+          "engage"
+        ]
+      }
+    },
+    "annotations": {
+      "openWorldHint": true,
+      "readOnlyHint": true
+    },
+    "description": "Read who wrote a LinkedIn post.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "post_url": {
+          "description": "Post permalink, \"/feed/update/<urn>/\" or \"/posts/<slug>\",\nas a full URL or a relative path, or the post's urn",
+          "type": "string"
+        }
+      },
+      "required": [
+        "post_url"
+      ],
+      "type": "object"
+    },
+    "name": "get_post_author",
+    "outputSchema": {
+      "additionalProperties": true,
+      "type": "object"
+    },
+    "title": "Get Post Author"
+  },
+  {
+    "_meta": {
+      "fastmcp": {
+        "tags": [
           "job"
         ]
       }
@@ -536,6 +640,44 @@
       "type": "object"
     },
     "title": "Get Sidebar Profiles"
+  },
+  {
+    "_meta": {
+      "fastmcp": {
+        "tags": [
+          "engage"
+        ]
+      }
+    },
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": true
+    },
+    "description": "React to a LinkedIn post. This is a write operation.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "post_url": {
+          "description": "Post permalink, \"/feed/update/<urn>/\" or \"/posts/<slug>\",\nas a full URL or a relative path, or the post's urn",
+          "type": "string"
+        },
+        "reaction": {
+          "description": "One of like, celebrate, support, love, insightful, funny",
+          "type": "string"
+        }
+      },
+      "required": [
+        "post_url",
+        "reaction"
+      ],
+      "type": "object"
+    },
+    "name": "react_to_post",
+    "outputSchema": {
+      "additionalProperties": true,
+      "type": "object"
+    },
+    "title": "React To Post"
   },
   {
     "_meta": {

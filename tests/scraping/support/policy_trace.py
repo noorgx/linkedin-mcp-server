@@ -200,6 +200,9 @@ class ScriptedLocator:
     async def click(self, *, timeout: int | None = None) -> None:
         await self._operation("click", timeout_ms=timeout)
 
+    async def hover(self, *, timeout: int | None = None) -> None:
+        await self._operation("hover", timeout_ms=timeout)
+
     async def fill(self, value: str, *, timeout: int | None = None) -> None:
         await self._operation("fill", value=value, timeout_ms=timeout)
 
@@ -559,6 +562,9 @@ def semantic_selector_id(selector: str) -> str:
         "main": "main",
         "[role='menu']": "profile_more_menu",
         "main li label[aria-label]": "conversation_rows",
+        "main button[aria-pressed]": "post_react_trigger",
+        'main a[href*="/in/"], main a[href*="/company/"]': "post_author_link",
+        'main [role="textbox"][contenteditable="true"]': "comment_editor",
     }
     if selector in selectors:
         return selectors[selector]
@@ -607,6 +613,17 @@ def semantic_program_id(program: str) -> str:
         ("return inspect(target).status === 'valid'", "message_composer_ready"),
         ("submitUsable", "message_composer_state"),
         ("__linkedinMcpComposer =", "message_composer_owner"),
+        ("refs.push(ref)", "post_trigger_candidates"),
+        ("found.length !== 1", "post_trigger_retag"),
+        ("shown.some(b => !!menuOf(b))", "post_reaction_menu_open"),
+        ("currentType: iconType(trigger)", "post_reaction_state"),
+        ("matches[0].click()", "post_reaction_pick"),
+        ("buttons.indexOf(trigger) + 1", "comment_button_open"),
+        ("norm(editor.innerText) === norm(text)", "comment_write"),
+        ("document.execCommand('delete'", "comment_clear"),
+        ("if (!click) return 'ready'", "comment_submit"),
+        ("slice(0, 60)", "comment_state"),
+        (r"pathname.match(/^\/(in|company)\/", "post_author"),
         ("document.execCommand('insertText'", "message_composer_write"),
         ("return pinned.button.disabled", "message_submit_ready"),
         ("inputType: 'deleteContentBackward'", "message_composer_cleanup"),
