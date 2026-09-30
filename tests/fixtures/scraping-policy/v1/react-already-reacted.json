@@ -94,7 +94,7 @@
       "call": "react_to_post",
       "kind": "evaluate",
       "operation": "post_trigger_candidates",
-      "program_digest": "55fcec2207c4",
+      "program_digest": "9541889e6684",
       "section": "post"
     },
     {
@@ -116,7 +116,7 @@
       "call": "react_to_post",
       "kind": "evaluate",
       "operation": "post_reaction_menu_open",
-      "program_digest": "a254fc2a85a5",
+      "program_digest": "29620a781c60",
       "section": "post"
     },
     {
@@ -124,7 +124,7 @@
       "call": "react_to_post",
       "kind": "evaluate",
       "operation": "post_reaction_state",
-      "program_digest": "a0a5d166e984",
+      "program_digest": "d1a035b81814",
       "section": "post"
     }
   ],

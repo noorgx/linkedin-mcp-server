@@ -144,11 +144,16 @@ def short_budgets(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _unpressed() -> dict[str, Any]:
-    return {"hasTrigger": True, "pressed": False, "currentType": None}
+    return {"hasTrigger": True, "pressed": False, "currentType": None, "depth": 3}
 
 
 def _pressed(reaction_type: str | None) -> dict[str, Any]:
-    return {"hasTrigger": True, "pressed": True, "currentType": reaction_type}
+    return {
+        "hasTrigger": True,
+        "pressed": True,
+        "currentType": reaction_type,
+        "depth": 3,
+    }
 
 
 class TestTrigger:
@@ -218,6 +223,19 @@ class TestTrigger:
                 "7510371678175096832",
             ),
             ("https://www.linkedin.com/posts/jane_ai-note", None),
+            # A title word followed by a number is not the post id: only the
+            # keyword and long number the slug ends with count.
+            (
+                "https://www.linkedin.com/posts/"
+                "jane-doe_how-to-share-10-tips-activity-7123456789012345678-AbCd",
+                POST_ID,
+            ),
+            (
+                "https://www.linkedin.com/posts/"
+                "jane-doe_activity-12-things-ugcPost-7123456789012345679-XyZw",
+                "7123456789012345679",
+            ),
+            ("https://www.linkedin.com/posts/jane-doe_share-10-tips", None),
         ],
     )
     async def test_the_requested_post_id_reaches_the_candidate_probe(
@@ -369,8 +387,31 @@ class TestTag:
 
         assert result["status"] == "reacted"
         assert page.evaluated("retag") == [
-            {"postId": POST_ID, "ref": "t-0", "rejected": []}
+            {"postId": POST_ID, "ref": "t-0", "rejected": [], "depth": 3}
         ]
+
+    async def test_the_re_tag_is_held_to_the_validated_button_depth(self):
+        # A comment's react button can pass every other re-tag check. The
+        # depth of the validated button below the post container, read
+        # before the click, is handed to every re-tag so only a button at the
+        # post's own action bar position can take the tag back.
+        page = FakePage(
+            {
+                "candidates": [["t-0"]],
+                "menu_open": [True],
+                "state": [
+                    {**_unpressed(), "depth": 5},
+                    {"hasTrigger": False},
+                ],
+                "retag": [False],
+            }
+        )
+
+        result = await _actions(page).react_to_post(POST, "like")
+
+        assert result["status"] == "outcome_unknown"
+        assert page.evaluated("retag")
+        assert all(arg["depth"] == 5 for arg in page.evaluated("retag"))
 
     async def test_a_redraw_never_hands_the_tag_to_a_rejected_follow(self):
         # Follow is the first candidate and fails the hover check. After the

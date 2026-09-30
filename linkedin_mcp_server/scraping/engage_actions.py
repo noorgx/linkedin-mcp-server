@@ -31,8 +31,11 @@ does not translate:
   A tag gone before a click means nothing is clicked. One gone after the
   click (LinkedIn may redraw the button) goes back only to the one button
   that still passes checks 1 and 2, has a complete reactions menu inside its
-  own action bar (read from the page, hovered or not), and was not rejected by
-  the hover check earlier in the call. Otherwise the outcome stays unknown.
+  own action bar (read from the page, hovered or not), was not rejected by
+  the hover check earlier in the call, and sits as many steps below the post
+  container as the validated button did before the click. A comment's react
+  button has a bar and menu of its own inside the same container but sits
+  deeper, so it never takes the tag. Otherwise the outcome stays unknown.
 
 * the comment editor is the first visible ``[role=textbox][contenteditable]``
   in ``<main>`` outside a dialog, and its Post button is the one
@@ -94,9 +97,11 @@ _REACT_TRIGGER = "main button[aria-pressed]"
 _EDITOR = 'main [role="textbox"][contenteditable="true"]'
 
 # The post id a permalink names: the urn's number, or the activity, ugcPost
-# or share number a /posts/ slug ends with.
+# or share number a /posts/ slug ends with. The slug match is anchored to the
+# end (the id, then LinkedIn's short suffix) and needs an id of realistic
+# length, so a title such as "how-to-share-10-tips" is never read as one.
 _URN_ID = re.compile(r"urn:li:(?:activity|share|ugcPost):([0-9]+)")
-_SLUG_ID = re.compile(r"(?:activity|ugcPost|share)-([0-9]+)")
+_SLUG_ID = re.compile(r"[-_/](?:activity|ugcPost|share)-([0-9]{15,})(?:-[^/-]+)?/?$")
 
 # Budgets. The page is already loaded when each starts, so they cover LinkedIn
 # rendering a control or committing an action, not a navigation.
@@ -166,6 +171,19 @@ const barOf = (main, trigger) => {
   }
   return null;
 };
+// Steps from the button up to its post container (the nearest [data-urn],
+// else <main>). The post's own action bar sits at one depth; a comment's
+// react button sits deeper inside the same container.
+const depthOf = button => {
+  const holder = button.closest('[data-urn]') || button.closest('main');
+  let steps = 0;
+  let el = button;
+  while (el && el !== holder) {
+    el = el.parentElement;
+    steps += 1;
+  }
+  return el ? steps : null;
+};
 const findBar = (main, trigger) => {
   const bar = barOf(main, trigger);
   return bar ? bar.buttons : null;
@@ -204,8 +222,12 @@ TRIGGER_CANDIDATES_JS = (
 # Give the tag back after LinkedIn redrew the validated button. A button
 # qualifies only when it passes the bar and post checks, holds a complete
 # reactions menu inside its own action bar (read from the page, visible or
-# not, since no hover happens here), and does not carry a ref the hover check
-# rejected earlier in the call. Exactly one must qualify. True when tagged.
+# not, since no hover happens here), does not carry a ref the hover check
+# rejected earlier in the call, and sits at the depth below the post
+# container the validated button had before the click. The depth keeps a
+# comment's react button, which has a bar and menu of its own inside the
+# same container, from taking the tag. Exactly one must qualify. True when
+# tagged; false when no depth was recorded.
 RETAG_TRIGGER_JS = (
     r"""
 ((arg) => {
@@ -213,13 +235,14 @@ RETAG_TRIGGER_JS = (
     + _HELPERS_JS
     + r"""
   const main = document.querySelector('main');
-  if (!main) return false;
+  if (!main || typeof arg.depth !== 'number') return false;
   const rejected = new Set(arg.rejected || []);
   const menuInBar = bar => Array.from(bar.el.querySelectorAll('button')).some(
     b => oneIcon(b) && !!menuOf(b)
   );
   const found = triggers(main).filter(b => {
     if (rejected.has(b.getAttribute('data-engage-ref'))) return false;
+    if (depthOf(b) !== arg.depth) return false;
     const bar = barOf(main, b);
     return !!bar && ofPost(b, arg.postId) && menuInBar(bar);
   });
@@ -246,8 +269,9 @@ MENU_OPEN_JS = (
 """
 )
 
-# The validated trigger's state: pressed, and which reaction type its icon
-# names (null when it names none).
+# The validated trigger's state: pressed, which reaction type its icon names
+# (null when it names none), and its depth below the post container, which a
+# later re-tag is held to.
 POST_STATE_JS = (
     r"""
 ((ref) => {
@@ -260,6 +284,7 @@ POST_STATE_JS = (
     hasTrigger: true,
     pressed: trigger.getAttribute('aria-pressed') === 'true',
     currentType: iconType(trigger),
+    depth: depthOf(trigger),
   };
 })
 """
@@ -604,14 +629,20 @@ class EngageActions:
             await asyncio.sleep(_POLL)
 
     async def _reaction_confirmed(
-        self, ref: str, reaction_type: str, post_url: str, rejected: list[str]
+        self,
+        ref: str,
+        reaction_type: str,
+        post_url: str,
+        rejected: list[str],
+        depth: Any,
     ) -> bool:
         """Wait for the trigger to show exactly the requested reaction.
 
         A pressed trigger naming no type proves nothing about which reaction
         landed, so it never confirms. A trigger LinkedIn redrew loses its
         tag; ``RETAG_TRIGGER_JS`` gives it back only to a button with a
-        reactions menu in its own bar that the hover check did not reject.
+        reactions menu in its own bar that the hover check did not reject,
+        at ``depth``, the validated button's depth read before the click.
         """
         deadline = self._session.monotonic() + _CONFIRM_TIMEOUT
         while True:
@@ -621,7 +652,12 @@ class EngageActions:
             if not state.get("hasTrigger"):
                 await self._session.page.evaluate(
                     RETAG_TRIGGER_JS,
-                    {"postId": post_id(post_url), "ref": ref, "rejected": rejected},
+                    {
+                        "postId": post_id(post_url),
+                        "ref": ref,
+                        "rejected": rejected,
+                        "depth": depth,
+                    },
                 )
             if self._session.monotonic() >= deadline:
                 return False
@@ -686,7 +722,9 @@ class EngageActions:
                         post_url, "react_failed", reaction, retry_safe=True
                     )
 
-            if await self._reaction_confirmed(ref, reaction_type, post_url, rejected):
+            if await self._reaction_confirmed(
+                ref, reaction_type, post_url, rejected, state.get("depth")
+            ):
                 return _react_result(post_url, "reacted", reaction, retry_safe=False)
             return _react_result(
                 post_url, "outcome_unknown", reaction, retry_safe=False

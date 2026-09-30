@@ -177,6 +177,8 @@ def _render(
     move_on_hover: bool = False,
     insert_on_hover: bool = False,
     header_controls: bool = False,
+    reacted_comment: bool = False,
+    drop_trigger_on_like: bool = False,
 ) -> str:
     """Fill a fixture. ``already`` is a reaction type the post carries on
     load, or ``"unreadable"`` for a pressed trigger whose icon names none."""
@@ -212,8 +214,48 @@ def _render(
             if header_controls
             else ""
         ),
+        reacted_comment=_reacted_comment(labels) if reacted_comment else "",
+        drop_trigger_on_like="true" if drop_trigger_on_like else "false",
     )
     return Template((FIXTURES / name).read_text(encoding="utf-8")).substitute(values)
+
+
+def _reacted_comment(labels: Labels) -> str:
+    """A comment already carrying a LIKE, with a full action bar and its own
+    six-reaction menu, as LinkedIn renders one under a post."""
+    menu = "".join(
+        f'<button type="button" aria-label="{label}" '
+        f'data-fixture-id="comment-menu-{kind}">'
+        f'<img data-test-reactions-icon-type="{kind}" alt=""></button>'
+        for kind, label in (
+            ("LIKE", labels.like),
+            ("PRAISE", labels.celebrate),
+            ("APPRECIATION", labels.support),
+            ("EMPATHY", labels.love),
+            ("INTEREST", labels.insightful),
+            ("ENTERTAINMENT", labels.funny),
+        )
+    )
+    return (
+        '<article class="comment">'
+        '<a href="https://www.linkedin.com/in/third-person/">'
+        '<span aria-hidden="true">Third Person</span></a>'
+        "<p>Agreed.</p>"
+        '<div class="comment-actions">'
+        '<span class="reactions-react-button">'
+        f'<button type="button" aria-pressed="true" aria-label="{labels.react}" '
+        'data-fixture-id="comment-reacted-trigger">'
+        '<img data-test-reactions-icon-type="LIKE" alt="">'
+        f"{labels.like}</button>"
+        f'<div class="reactions-menu comment-menu" hidden>{menu}</div>'
+        "</span>"
+        f'<button type="button" aria-label="{labels.comment}" '
+        f'data-fixture-id="comment-reply">{labels.comment}</button>'
+        f'<button type="button" aria-label="{labels.more}" '
+        f'data-fixture-id="comment-more">{labels.more}</button>'
+        "</div>"
+        "</article>"
+    )
 
 
 class FixtureNavigator:
@@ -435,6 +477,36 @@ class TestReact:
                 },
                 ["react-trigger"],
                 "LIKE",
+            )
+        )
+
+    async def test_a_redraw_never_hands_the_tag_to_a_reacted_comment(self, dom_page):
+        # A comment under the post already carries a LIKE and has its own
+        # action bar and reactions menu inside the post's container. The like
+        # click removes the post's trigger and nothing replaces it, so the
+        # comment's button is the only one the re-tag could match. It sits
+        # deeper in the post than the validated trigger did, so the tag is
+        # never handed to it and the outcome stays unknown.
+        async def read(page: Any, labels: Labels) -> tuple[dict[str, Any], list[str]]:
+            html = _render(
+                "post.html",
+                labels,
+                reacted_comment=True,
+                drop_trigger_on_like=True,
+            )
+            result = await _engage(page, html).react_to_post(POST, "like")
+            return result, await _clicks(page)
+
+        answers = await _every_locale(dom_page, read)
+        assert answers == _same(
+            (
+                {
+                    "url": POST,
+                    "status": "outcome_unknown",
+                    "reaction": "like",
+                    "retry_safe": False,
+                },
+                ["react-trigger"],
             )
         )
 

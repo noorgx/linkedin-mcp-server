@@ -29,6 +29,10 @@
   time the react trigger is hovered (a toggle that loaded late).
   $header_controls sits beside Follow in the actor block: a control-menu
   button and a dismiss button, which give Follow an action bar of its own.
+  $reacted_comment is a comment with a full action bar of its own (react
+  button already pressed with a LIKE icon, its own six-reaction menu, Reply,
+  More). $drop_trigger_on_like removes the post's react trigger when it is
+  clicked and puts nothing back (a redraw that never finishes).
 
   These pages are hand-built from how LinkedIn's post page is known to be
   structured, not saved from a live session.
@@ -41,6 +45,7 @@
   const COMMENTS_ENABLED = $comments_enabled;
   const MOVE_ON_HOVER = $move_on_hover;
   const INSERT_ON_HOVER = $insert_on_hover;
+  const DROP_TRIGGER_ON_LIKE = $drop_trigger_on_like;
   function record(id) {
     const now = document.body.getAttribute('data-clicks');
     document.body.setAttribute('data-clicks', now ? now + ',' + id : id);
@@ -86,6 +91,10 @@
   function toggleLike() {
     if (SILENT) return;
     const trigger = document.querySelector('[data-fixture-id="react-trigger"]');
+    if (DROP_TRIGGER_ON_LIKE) {
+      trigger.remove();
+      return;
+    }
     setReaction(trigger.getAttribute('aria-pressed') === 'true' ? null : 'LIKE');
   }
   function showCommentBox() {
@@ -159,6 +168,7 @@
         <button type="submit" disabled data-fixture-id="comment-submit">$post</button>
       </form>
       <div class="comments-list">
+        $reacted_comment
         <article class="comment">
           <a href="https://www.linkedin.com/in/other-person/"><span aria-hidden="true">Other Person</span></a>
           <p>$existing_comment</p>

@@ -47,9 +47,14 @@ the two write tools, like every other tool that is not `readOnlyHint`.
   appears, and again inside every click program. A post that moves itself to
   `/feed/` after loading is `post_unavailable` with nothing clicked.
 - When the URL names a post id (the urn's number, or the `activity-<id>`,
-  `ugcPost-<id>` or `share-<id>` in a `/posts/` slug), the react button's nearest `[data-urn]` container has to
-  carry that id in an attribute of its own or of an element inside it.
-  Otherwise the result is `post_unavailable`, `retry_safe` true.
+  `ugcPost-<id>` or `share-<id>` a `/posts/` slug ends with), the react
+  button's nearest `[data-urn]` container has to carry that id in an
+  attribute of its own or of an element inside it. Otherwise the result is
+  `post_unavailable`, `retry_safe` true. The slug is read from its end only
+  (the id, then LinkedIn's short suffix) and the id has to be 15 digits or
+  more, so a title such as `how-to-share-10-tips` is never taken for the id.
+  A slug that ends without one names no id, and the container check is
+  skipped.
 - The react button has to sit in an action bar that holds no other
   `aria-pressed` button (a Follow toggle in the header fails this), and
   hovering it has to open a menu with all six reaction types. A Follow that
@@ -63,9 +68,12 @@ the two write tools, like every other tool that is not `readOnlyHint`.
   vanished, gives `post_unavailable` with nothing clicked. If LinkedIn redraws
   the button after the click, the tag goes back only to the one button that
   still passes the bar and post checks, holds a complete reactions menu in its
-  own action bar (read from the page without hovering), and was not rejected
-  by the hover check earlier in the call; otherwise the result stays
-  `outcome_unknown`.
+  own action bar (read from the page without hovering), was not rejected by
+  the hover check earlier in the call, and sits as many steps below the post
+  container as the validated button did before the click. A comment's react
+  button has its own bar and menu inside the same container, but sits
+  deeper, so it never takes the tag, even when it already shows the requested
+  reaction. Otherwise the result stays `outcome_unknown`.
 
 ## Selectors
 
