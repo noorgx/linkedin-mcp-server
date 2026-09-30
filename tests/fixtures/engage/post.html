@@ -24,7 +24,11 @@
   reaction clicks change nothing (an action LinkedIn never confirms),
   $comments_enabled false makes the Comment button open no editor, and
   $move_on_hover moves the page to /feed/ in place, without a reload, the
-  first time the react trigger is hovered.
+  first time the react trigger is hovered. $insert_on_hover puts a new
+  aria-pressed button at the top of <main>, before the action bar, the first
+  time the react trigger is hovered (a toggle that loaded late).
+  $header_controls sits beside Follow in the actor block: a control-menu
+  button and a dismiss button, which give Follow an action bar of its own.
 
   These pages are hand-built from how LinkedIn's post page is known to be
   structured, not saved from a live session.
@@ -36,6 +40,7 @@
   const SILENT = $silent;
   const COMMENTS_ENABLED = $comments_enabled;
   const MOVE_ON_HOVER = $move_on_hover;
+  const INSERT_ON_HOVER = $insert_on_hover;
   function record(id) {
     const now = document.body.getAttribute('data-clicks');
     document.body.setAttribute('data-clicks', now ? now + ',' + id : id);
@@ -60,6 +65,14 @@
     }
   }
   function openMenu() {
+    if (INSERT_ON_HOVER && !document.querySelector('[data-fixture-id="late-toggle"]')) {
+      const late = document.createElement('button');
+      late.type = 'button';
+      late.setAttribute('aria-pressed', 'false');
+      late.setAttribute('data-fixture-id', 'late-toggle');
+      late.textContent = 'late';
+      document.querySelector('main').prepend(late);
+    }
     if (MOVE_ON_HOVER && location.pathname !== '/feed/') {
       history.pushState({}, '', '/feed/');
     }
@@ -109,6 +122,7 @@
         <span class="actor-description"><span aria-hidden="true">$actor_headline</span></span>
       </a>
       <button type="button" aria-label="$follow" data-fixture-id="follow" $follow_attrs>$follow</button>
+      $header_controls
     </div>
     <div class="update-components-text"><p>$body</p></div>
     <div class="social-counts">

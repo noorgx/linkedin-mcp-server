@@ -52,7 +52,17 @@ the two write tools, like every other tool that is not `readOnlyHint`.
   Otherwise the result is `post_unavailable`, `retry_safe` true.
 - The react button has to sit in an action bar that holds no other
   `aria-pressed` button (a Follow toggle in the header fails this), and
-  hovering it has to open a menu with all six reaction types.
+  hovering it has to open a menu with all six reaction types. A Follow that
+  shares its header with other controls can pass the bar check; the hover
+  check is what rejects it.
+- Each candidate is tagged `data-engage-ref` with a token drawn for the call,
+  and every later step (hover, state reads, the like click, the menu pick, the
+  Comment button) finds the button by that tag, never by its position, so a
+  toggle that renders later earlier in the page cannot take its place. A tag
+  gone before a click gives `post_unavailable` with nothing clicked. If
+  LinkedIn redraws the button after the click, the tag goes back only to the
+  one button that still passes the bar and post checks; otherwise the result
+  stays `outcome_unknown`.
 
 ## Selectors
 
@@ -102,10 +112,9 @@ machine: `test_canonical_fixtures_are_portable_deterministic_json` (the
 checkout has CRLF line endings; the committed LF bytes pass) and
 `test_the_owner_entry_point_says_so_before_it_can_fail`.
 
-The browser tests in `tests/scraping/test_engage_actions_dom.py` passed, 11 of
-11, before that restriction. The cases added since (20 in all now) have not
-been run in a browser. `tests/scraping/test_engage_actions.py` covers the same
-decisions without a browser.
+The browser tests in `tests/scraping/test_engage_actions_dom.py` are the one
+file allowed a single headless run. `tests/scraping/test_engage_actions.py`
+covers the same decisions without a browser.
 
 ## Live check
 

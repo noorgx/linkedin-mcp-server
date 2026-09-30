@@ -19,6 +19,7 @@ from patchright.async_api import TimeoutError as PlaywrightTimeoutError
 from linkedin_mcp_server.callbacks import ProgressCallback
 from linkedin_mcp_server.scraping import capture as capture_module
 from linkedin_mcp_server.scraping import company as company_module
+from linkedin_mcp_server.scraping import engage_actions as engage_module
 from linkedin_mcp_server.scraping import feed as feed_module
 from linkedin_mcp_server.scraping import job_pages as job_pages_module
 from linkedin_mcp_server.scraping import jobs as jobs_module
@@ -1009,15 +1010,15 @@ async def _post_author_scenario() -> dict[str, Any]:
 
 async def _react_scenario() -> dict[str, Any]:
     # The one path that ends without a click: the requested reaction is
-    # already the post's reaction. The trigger is still validated first, by
-    # hovering the one candidate until its reactions menu shows.
+    # already the post's reaction. The trigger is still validated first: the
+    # one candidate is tagged, then hovered by its tag until its reactions
+    # menu shows. The tag's token is pinned so the trace is deterministic.
     name = "react_to_post__already_reacted"
     recorder = TraceRecorder(name, _COMMON_ALLOWED | {"locator.hover"})
     clock = FakeClock(recorder)
     page = _page(recorder)
-    page.script("evaluate:post_trigger_candidates", [0])
-    page.declare_locator("main button[aria-pressed]", "react_triggers")
-    page.declare_derived("react_triggers", "nth:0", "react_trigger")
+    page.script("evaluate:post_trigger_candidates", ["trace-0"])
+    page.declare_locator('main button[data-engage-ref="trace-0"]', "react_trigger")
     page.script("react_trigger.hover", None)
     page.script("evaluate:post_reaction_menu_open", True)
     page.script(
@@ -1026,7 +1027,10 @@ async def _react_scenario() -> dict[str, Any]:
     )
     extractor = _extractor(page)
     async with boundaries(recorder, clock):
-        with recorder.context("react_to_post", "post"):
+        with (
+            patch.object(engage_module, "_new_token", return_value="trace"),
+            recorder.context("react_to_post", "post"),
+        ):
             result = await extractor.react_to_post(_POST_URL, "celebrate")
     page.assert_clean()
     return recorder.trace(

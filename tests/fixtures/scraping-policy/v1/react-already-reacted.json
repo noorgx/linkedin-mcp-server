@@ -87,28 +87,23 @@
       "timeout_ms": 10000
     },
     {
-      "arg": "7123456789012345678",
+      "arg": {
+        "postId": "7123456789012345678",
+        "token": "trace"
+      },
       "call": "react_to_post",
       "kind": "evaluate",
       "operation": "post_trigger_candidates",
-      "program_digest": "d6760d797301",
+      "program_digest": "08df480172fc",
       "section": "post"
     },
     {
       "call": "react_to_post",
       "kind": "locator.create",
-      "locator": "react_triggers",
+      "locator": "react_trigger",
       "parent": null,
       "section": "post",
-      "selector": "main button[aria-pressed]"
-    },
-    {
-      "call": "react_to_post",
-      "kind": "locator.derive",
-      "locator": "react_trigger",
-      "operation": "nth:0",
-      "parent": "react_triggers",
-      "section": "post"
+      "selector": "main button[data-engage-ref=\"trace-0\"]"
     },
     {
       "call": "react_to_post",
@@ -121,15 +116,15 @@
       "call": "react_to_post",
       "kind": "evaluate",
       "operation": "post_reaction_menu_open",
-      "program_digest": "717b9050a74c",
+      "program_digest": "1f4eef8afdf1",
       "section": "post"
     },
     {
-      "arg": 0,
+      "arg": "trace-0",
       "call": "react_to_post",
       "kind": "evaluate",
       "operation": "post_reaction_state",
-      "program_digest": "26055c918702",
+      "program_digest": "e65290d90bc3",
       "section": "post"
     }
   ],

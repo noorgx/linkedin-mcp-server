@@ -71,6 +71,7 @@ class Labels:
     pending: str
     more: str
     connect: str
+    dismiss: str
 
 
 ENGLISH = Labels(
@@ -96,6 +97,7 @@ ENGLISH = Labels(
     pending="Pending, click to withdraw invitation sent to Florian",
     more="More",
     connect="Invite Someone to connect",
+    dismiss="Dismiss",
 )
 
 GERMAN = Labels(
@@ -121,6 +123,7 @@ GERMAN = Labels(
     pending="Ausstehend, klicken zum Zurückziehen",
     more="Mehr",
     connect="Als Kontakt einladen",
+    dismiss="Ausblenden",
 )
 
 OPAQUE = Labels(
@@ -146,6 +149,7 @@ OPAQUE = Labels(
     pending="q19",
     more="q20",
     connect="q21",
+    dismiss="q22",
 )
 
 EMPTY_ARIA = Labels(
@@ -171,6 +175,8 @@ def _render(
     silent: bool = False,
     comments_enabled: bool = True,
     move_on_hover: bool = False,
+    insert_on_hover: bool = False,
+    header_controls: bool = False,
 ) -> str:
     """Fill a fixture. ``already`` is a reaction type the post carries on
     load, or ``"unreadable"`` for a pressed trigger whose icon names none."""
@@ -195,6 +201,17 @@ def _render(
         silent="true" if silent else "false",
         comments_enabled="true" if comments_enabled else "false",
         move_on_hover="true" if move_on_hover else "false",
+        insert_on_hover="true" if insert_on_hover else "false",
+        header_controls=(
+            '<button type="button" aria-expanded="false" aria-label="'
+            + labels.more
+            + '" data-fixture-id="control-menu">...</button>'
+            '<button type="button" aria-label="'
+            + labels.dismiss
+            + '" data-fixture-id="dismiss">x</button>'
+            if header_controls
+            else ""
+        ),
     )
     return Template((FIXTURES / name).read_text(encoding="utf-8")).substitute(values)
 
@@ -358,6 +375,55 @@ class TestReact:
         answers = await _every_locale(
             dom_page,
             lambda page, labels: _react(page, labels, "like", follow_pressed=True),
+        )
+        assert answers == _same(
+            (
+                {
+                    "url": POST,
+                    "status": "reacted",
+                    "reaction": "like",
+                    "retry_safe": False,
+                },
+                ["react-trigger"],
+                "LIKE",
+            )
+        )
+
+    async def test_a_toggle_inserted_before_the_bar_after_validation_is_ignored(
+        self, dom_page
+    ):
+        # Hovering the trigger inserts a new aria-pressed button at the top of
+        # <main>. A position-based lookup would now click that button; the
+        # tagged trigger is still the one clicked.
+        answers = await _every_locale(
+            dom_page,
+            lambda page, labels: _react(page, labels, "like", insert_on_hover=True),
+        )
+        assert answers == _same(
+            (
+                {
+                    "url": POST,
+                    "status": "reacted",
+                    "reaction": "like",
+                    "retry_safe": False,
+                },
+                ["react-trigger"],
+                "LIKE",
+            )
+        )
+
+    async def test_a_follow_with_its_own_action_bar_fails_the_hover_check(
+        self, dom_page
+    ):
+        # Follow carries aria-pressed and shares the actor block with a
+        # control-menu button and a dismiss button, so it passes the bar check
+        # as the first candidate. Hovering it opens no reactions menu, so it
+        # is rejected and like lands on the post's trigger.
+        answers = await _every_locale(
+            dom_page,
+            lambda page, labels: _react(
+                page, labels, "like", follow_pressed=True, header_controls=True
+            ),
         )
         assert answers == _same(
             (
@@ -542,6 +608,22 @@ class TestComment:
             dom_page,
             lambda page, labels: _comment(
                 page, labels, hidden=True, follow_pressed=True
+            ),
+        )
+        assert answers == _same(
+            (
+                {"url": POST, "status": "commented", "retry_safe": False},
+                ["comment-button", "comment-submit"],
+                [COMMENT],
+                "",
+            )
+        )
+
+    async def test_the_comment_button_is_found_past_a_late_toggle(self, dom_page):
+        answers = await _every_locale(
+            dom_page,
+            lambda page, labels: _comment(
+                page, labels, hidden=True, insert_on_hover=True
             ),
         )
         assert answers == _same(

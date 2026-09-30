@@ -23,7 +23,7 @@ a page-owning collaborator.
 | `content` | `PageContentReader` | `page-owning` |
 | `contracts` | `ExtractedSection`, `FilterValidationError`, `RATE_LIMITED_SECTION_TEXT`, `SEND_INTERRUPTED_WARNING`, `message_action_result()`, `rate_limited_section_error()`, `refuse_an_invalid_message()` | `browser-free` |
 | `conversations` | `ConversationReader`, `strip_select_conversation_prefix()` | `page-owning` |
-| `engage_actions` | `CLEAR_COMMENT_JS`, `CLICK_COMMENT_BUTTON_JS`, `CLICK_REACTION_JS`, `COMMENT_STATE_JS`, `EngageActions`, `MENU_OPEN_JS`, `POST_AUTHOR_JS`, `POST_STATE_JS`, `REACTION_TYPES`, `SUBMIT_COMMENT_JS`, `TRIGGER_CANDIDATES_JS`, `WRITE_COMMENT_JS`, `invalid_comment_reason()`, `post_id()` | `page-owning` |
+| `engage_actions` | `CLEAR_COMMENT_JS`, `CLICK_COMMENT_BUTTON_JS`, `CLICK_REACTION_JS`, `COMMENT_STATE_JS`, `EngageActions`, `MENU_OPEN_JS`, `POST_AUTHOR_JS`, `POST_STATE_JS`, `REACTION_TYPES`, `RETAG_TRIGGER_JS`, `SUBMIT_COMMENT_JS`, `TRIGGER_CANDIDATES_JS`, `WRITE_COMMENT_JS`, `invalid_comment_reason()`, `post_id()` | `page-owning` |
 | `extractor` | `LinkedInExtractor` | `page-owning` |
 | `feed` | `FeedScraper` | `page-owning` |
 | `feed_payload` | `POST_SLUG_URL_RE`, `append_permalink_references()`, `build_feed_references()`, `is_feed_payload_response()`, `is_permalink_payload_response()`, `permalink_paths_from_payload()` | `browser-free` |

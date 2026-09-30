@@ -23,6 +23,15 @@ does not translate:
   3. hovering it opens a reactions menu with all six types. Hovering is not a
      click and changes nothing on LinkedIn.
 
+  Every candidate is tagged ``data-engage-ref="<token>-<n>"`` with a token
+  drawn for this call, and every later step (hover, state reads, the like
+  click, the menu pick, the Comment button) finds the button by that tag. A
+  position among ``button[aria-pressed]`` would shift when LinkedIn renders
+  another such button earlier in the page, and the click would land on it.
+  A tag gone before a click means nothing is clicked. One gone after the
+  click (LinkedIn may redraw the button) goes back to the one button that
+  still passes checks 1 and 2, or the outcome stays unknown.
+
 * the comment editor is the first visible ``[role=textbox][contenteditable]``
   in ``<main>`` outside a dialog, and its Post button is the one
   ``button[type=submit]`` of the form around it.
@@ -54,6 +63,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import secrets
 from typing import Any
 from urllib.parse import urlparse
 
@@ -125,6 +135,20 @@ const menuOf = button => {
 };
 const isMenuItem = b => oneIcon(b) && !!menuOf(b);
 const triggers = main => Array.from(main.querySelectorAll('button[aria-pressed]'));
+const byRef = ref => document.querySelector(
+  'main button[data-engage-ref="' + CSS.escape(ref) + '"]'
+);
+const ofPost = (trigger, postId) => {
+  if (!postId) return true;
+  const holder = trigger.closest('[data-urn]');
+  if (!holder) return false;
+  for (const el of [holder, ...holder.querySelectorAll('*')]) {
+    for (const attr of el.attributes) {
+      if (attr.value.includes(postId)) return true;
+    }
+  }
+  return false;
+};
 const findBar = (main, trigger) => {
   const plain = b => b === trigger || (visible(b) && !b.querySelector(ICON));
   let el = trigger.parentElement;
@@ -148,32 +172,43 @@ const findEditor = main => {
 };
 """
 
-# Indices, among ``main button[aria-pressed]`` in document order, of the
-# buttons that sit in an action bar and belong to the requested post.
+# Tag, in document order, every ``main button[aria-pressed]`` that sits in an
+# action bar and belongs to the requested post, and return the tags.
 TRIGGER_CANDIDATES_JS = (
     r"""
-((postId) => {
+((arg) => {
 """
     + _HELPERS_JS
     + r"""
   const main = document.querySelector('main');
   if (!main) return [];
-  const ofPost = trigger => {
-    if (!postId) return true;
-    const holder = trigger.closest('[data-urn]');
-    if (!holder) return false;
-    for (const el of [holder, ...holder.querySelectorAll('*')]) {
-      for (const attr of el.attributes) {
-        if (attr.value.includes(postId)) return true;
-      }
+  const refs = [];
+  for (const b of triggers(main)) {
+    if (findBar(main, b) && ofPost(b, arg.postId)) {
+      const ref = arg.token + '-' + refs.length;
+      b.setAttribute('data-engage-ref', ref);
+      refs.push(ref);
     }
-    return false;
-  };
-  const candidates = [];
-  triggers(main).forEach((b, i) => {
-    if (findBar(main, b) && ofPost(b)) candidates.push(i);
-  });
-  return candidates;
+  }
+  return refs;
+})
+"""
+)
+
+# Give the tag back after LinkedIn redrew the validated button: only when
+# exactly one button passes the bar and post checks. True when tagged.
+RETAG_TRIGGER_JS = (
+    r"""
+((arg) => {
+"""
+    + _HELPERS_JS
+    + r"""
+  const main = document.querySelector('main');
+  if (!main) return false;
+  const found = triggers(main).filter(b => findBar(main, b) && ofPost(b, arg.postId));
+  if (found.length !== 1) return false;
+  found[0].setAttribute('data-engage-ref', arg.ref);
+  return true;
 })
 """
 )
@@ -198,12 +233,11 @@ MENU_OPEN_JS = (
 # names (null when it names none).
 POST_STATE_JS = (
     r"""
-((index) => {
+((ref) => {
 """
     + _HELPERS_JS
     + r"""
-  const main = document.querySelector('main');
-  const trigger = main ? triggers(main)[index] : null;
+  const trigger = byRef(ref);
   if (!trigger) return {hasTrigger: false};
   return {
     hasTrigger: true,
@@ -215,8 +249,9 @@ POST_STATE_JS = (
 )
 
 # Click the requested reaction in the open menu: 'clicked', 'missing' while no
-# unique visible menu item of that type exists, or 'moved' when the page has
-# left the post. The trigger itself is never a menu item.
+# unique visible menu item of that type exists, 'moved' when the page has left
+# the post, or 'gone' when the tagged trigger is no longer there. The trigger
+# itself is never a menu item.
 CLICK_REACTION_JS = (
     r"""
 ((arg) => {
@@ -224,8 +259,8 @@ CLICK_REACTION_JS = (
     + _HELPERS_JS
     + r"""
   if (!onPost()) return 'moved';
-  const main = document.querySelector('main');
-  const trigger = main ? triggers(main)[arg.index] : null;
+  const trigger = byRef(arg.ref);
+  if (!trigger) return 'gone';
   const matches = Array.from(document.querySelectorAll('button')).filter(
     b => b !== trigger && visible(b) && oneIcon(b) && iconType(b) === arg.type &&
       !!menuOf(b)
@@ -238,17 +273,19 @@ CLICK_REACTION_JS = (
 )
 
 # Open the comment editor from the validated trigger's action bar: the next
-# plain button after the trigger. 'clicked', 'missing' or 'moved'.
+# plain button after the trigger. 'clicked', 'missing', 'moved', or 'gone'
+# when the tagged trigger is no longer there.
 CLICK_COMMENT_BUTTON_JS = (
     r"""
-((index) => {
+((ref) => {
 """
     + _HELPERS_JS
     + r"""
   if (!onPost()) return 'moved';
   const main = document.querySelector('main');
-  const trigger = main ? triggers(main)[index] : null;
-  const buttons = trigger ? findBar(main, trigger) : null;
+  const trigger = byRef(ref);
+  if (!trigger || !main) return 'gone';
+  const buttons = findBar(main, trigger);
   if (!buttons) return 'missing';
   const next = buttons[buttons.indexOf(trigger) + 1];
   if (!next) return 'missing';
@@ -427,6 +464,15 @@ def invalid_comment_reason(text: str) -> str | None:
     return None
 
 
+def _new_token() -> str:
+    """A fresh tag prefix for one call's react-button candidates."""
+    return secrets.token_hex(8)
+
+
+def _ref_selector(ref: str) -> str:
+    return f'main button[data-engage-ref="{ref}"]'
+
+
 def post_id(post_url: str) -> str | None:
     """The numeric post id a normalized permalink names, if it names one."""
     match = _URN_ID.search(post_url) or _SLUG_ID.search(post_url)
@@ -492,53 +538,65 @@ class EngageActions:
                 return False
             await asyncio.sleep(_POLL)
 
-    async def _find_trigger(self, post_url: str) -> int | None:
-        """The index of the post's react trigger, validated by its menu.
+    async def _find_trigger(self, post_url: str) -> str | None:
+        """The tag of the post's react trigger, validated by its menu.
 
-        Each candidate is hovered in document order and the first one that
-        opens a complete reactions menu is the trigger. None when no
-        candidate does, or when the page leaves the post meanwhile.
+        Every candidate is tagged, then hovered by its tag in document order,
+        and the first one that opens a complete reactions menu is the
+        trigger. None when no candidate does, or when the page leaves the
+        post meanwhile.
         """
         page = self._session.page
-        candidates = await page.evaluate(TRIGGER_CANDIDATES_JS, post_id(post_url))
-        if not isinstance(candidates, list):
+        refs = await page.evaluate(
+            TRIGGER_CANDIDATES_JS,
+            {"postId": post_id(post_url), "token": _new_token()},
+        )
+        if not isinstance(refs, list):
             return None
-        for index in candidates:
-            if not isinstance(index, int) or not self._on_post():
+        for ref in refs:
+            if not isinstance(ref, str) or not self._on_post():
                 return None
-            await page.locator(_REACT_TRIGGER).nth(index).hover(timeout=5000)
+            await page.locator(_ref_selector(ref)).hover(timeout=5000)
             if await self._menu_opens():
-                return index if self._on_post() else None
+                return ref if self._on_post() else None
         return None
 
-    async def _post_state(self, index: int) -> dict[str, Any]:
-        state = await self._session.page.evaluate(POST_STATE_JS, index)
+    async def _post_state(self, ref: str) -> dict[str, Any]:
+        state = await self._session.page.evaluate(POST_STATE_JS, ref)
         return state if isinstance(state, dict) else {"hasTrigger": False}
 
-    async def _pick_reaction(self, index: int, reaction_type: str) -> str:
-        """Click the reaction once its menu item renders: 'clicked', 'missing'
-        or 'moved'."""
+    async def _pick_reaction(self, ref: str, reaction_type: str) -> str:
+        """Click the reaction once its menu item renders: 'clicked',
+        'missing', 'moved' or 'gone'."""
         deadline = self._session.monotonic() + _MENU_TIMEOUT
-        argument = {"index": index, "type": reaction_type}
+        argument = {"ref": ref, "type": reaction_type}
         while True:
             outcome = await self._session.page.evaluate(CLICK_REACTION_JS, argument)
-            if outcome in ("clicked", "moved"):
+            if outcome in ("clicked", "moved", "gone"):
                 return outcome
             if self._session.monotonic() >= deadline:
                 return "missing"
             await asyncio.sleep(_POLL)
 
-    async def _reaction_confirmed(self, index: int, reaction_type: str) -> bool:
+    async def _reaction_confirmed(
+        self, ref: str, reaction_type: str, post_url: str
+    ) -> bool:
         """Wait for the trigger to show exactly the requested reaction.
 
         A pressed trigger naming no type proves nothing about which reaction
-        landed, so it never confirms.
+        landed, so it never confirms. A trigger LinkedIn redrew loses its
+        tag; the tag goes back only to the one button that still passes the
+        bar and post checks.
         """
         deadline = self._session.monotonic() + _CONFIRM_TIMEOUT
         while True:
-            state = await self._post_state(index)
+            state = await self._post_state(ref)
             if state.get("pressed") and state.get("currentType") == reaction_type:
                 return True
+            if not state.get("hasTrigger"):
+                await self._session.page.evaluate(
+                    RETAG_TRIGGER_JS, {"postId": post_id(post_url), "ref": ref}
+                )
             if self._session.monotonic() >= deadline:
                 return False
             await asyncio.sleep(_POLL)
@@ -562,11 +620,11 @@ class EngageActions:
 
         if not await self._load_post(post_url) or not await self._post_is_shown():
             return unavailable()
-        index = await self._find_trigger(post_url)
-        if index is None:
+        ref = await self._find_trigger(post_url)
+        if ref is None:
             return unavailable()
 
-        state = await self._post_state(index)
+        state = await self._post_state(ref)
         if not state.get("hasTrigger"):
             return unavailable()
         current = state.get("currentType")
@@ -586,24 +644,23 @@ class EngageActions:
             if not self._on_post():
                 return unavailable()
             if use_trigger:
+                trigger = self._session.page.locator(_ref_selector(ref))
+                if await trigger.count() != 1:
+                    return unavailable()
                 may_have_reacted = True
-                await (
-                    self._session.page.locator(_REACT_TRIGGER)
-                    .nth(index)
-                    .click(timeout=5000)
-                )
+                await trigger.click(timeout=5000)
             else:
                 may_have_reacted = True
-                picked = await self._pick_reaction(index, reaction_type)
+                picked = await self._pick_reaction(ref, reaction_type)
                 if picked != "clicked":
                     may_have_reacted = False
-                    if picked == "moved":
+                    if picked in ("moved", "gone"):
                         return unavailable()
                     return _react_result(
                         post_url, "react_failed", reaction, retry_safe=True
                     )
 
-            if await self._reaction_confirmed(index, reaction_type):
+            if await self._reaction_confirmed(ref, reaction_type, post_url):
                 return _react_result(post_url, "reacted", reaction, retry_safe=False)
             return _react_result(
                 post_url, "outcome_unknown", reaction, retry_safe=False
@@ -623,15 +680,16 @@ class EngageActions:
                 )
             raise
 
-    async def _open_editor(self, index: int) -> str:
-        """'open', 'disabled' or 'moved'."""
+    async def _open_editor(self, ref: str) -> str:
+        """'open', 'disabled', or 'moved' (the page left the post or the
+        tagged trigger is gone)."""
         page = self._session.page
         if await page.locator(f"{_EDITOR} >> visible=true").count() > 0:
             return "open"
         if not self._on_post():
             return "moved"
-        clicked = await page.evaluate(CLICK_COMMENT_BUTTON_JS, index)
-        if clicked == "moved":
+        clicked = await page.evaluate(CLICK_COMMENT_BUTTON_JS, ref)
+        if clicked in ("moved", "gone"):
             return "moved"
         if clicked != "clicked":
             return "disabled"
@@ -683,10 +741,10 @@ class EngageActions:
 
         if not await self._load_post(post_url) or not await self._post_is_shown():
             return unavailable()
-        index = await self._find_trigger(post_url)
-        if index is None:
+        ref = await self._find_trigger(post_url)
+        if ref is None:
             return unavailable()
-        opened = await self._open_editor(index)
+        opened = await self._open_editor(ref)
         if opened == "moved":
             return unavailable()
         if opened != "open":

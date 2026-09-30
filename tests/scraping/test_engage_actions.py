@@ -9,6 +9,7 @@ withheld, and what each result reports.
 from __future__ import annotations
 
 from collections.abc import Callable
+import re
 from typing import Any, cast
 
 import pytest
@@ -25,6 +26,7 @@ POST_ID = "7123456789012345678"
 
 PROGRAMS = {
     "candidates": engage.TRIGGER_CANDIDATES_JS,
+    "retag": engage.RETAG_TRIGGER_JS,
     "menu_open": engage.MENU_OPEN_JS,
     "state": engage.POST_STATE_JS,
     "pick": engage.CLICK_REACTION_JS,
@@ -38,27 +40,32 @@ PROGRAMS = {
 _BY_SOURCE = {source: name for name, source in PROGRAMS.items()}
 
 
+_REF = re.compile(r'data-engage-ref="([^"]+)"')
+
+
 class FakeLocator:
-    def __init__(self, page: FakePage, selector: str, index: int | None = None):
+    """A locator; a tagged button is named by its ref in the calls."""
+
+    def __init__(self, page: FakePage, selector: str):
         self._page = page
         self._selector = selector
-        self._index = index
-
-    def nth(self, index: int) -> FakeLocator:
-        return FakeLocator(self._page, self._selector, index)
+        match = _REF.search(selector)
+        self._ref = match.group(1) if match else None
 
     async def count(self) -> int:
         if self._selector == "main":
             return 1
+        if self._ref is not None:
+            return 0 if self._ref in self._page.gone else 1
         return self._page.visible_editors
 
     async def hover(self, *, timeout: int | None = None) -> None:
-        self._page.calls.append(("hover", self._index))
+        self._page.calls.append(("hover", self._ref))
         if self._page.on_hover is not None:
             self._page.on_hover(self._page)
 
     async def click(self, *, timeout: int | None = None) -> None:
-        self._page.calls.append(("click", self._index))
+        self._page.calls.append(("click", self._ref))
         if self._page.on_click is not None:
             self._page.on_click(self._page)
 
@@ -78,6 +85,7 @@ class FakePage:
         self.on_hover: Callable[[FakePage], None] | None = None
         self.on_click: Callable[[FakePage], None] | None = None
         self.never_appear: set[str] = set()
+        self.gone: set[str] = set()
 
     async def evaluate(self, program: str, arg: Any = None) -> Any:
         name = _BY_SOURCE[program]
@@ -125,6 +133,7 @@ def _actions(page: FakePage, landing: str | None = None) -> EngageActions:
 
 @pytest.fixture(autouse=True)
 def short_budgets(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(engage, "_new_token", lambda: "t")
     monkeypatch.setattr(engage, "_MENU_TIMEOUT", 0.2)
     monkeypatch.setattr(engage, "_CONFIRM_TIMEOUT", 0.2)
     monkeypatch.setattr(engage, "_SUBMIT_READY_TIMEOUT", 0.2)
@@ -141,27 +150,27 @@ def _pressed(reaction_type: str | None) -> dict[str, Any]:
 
 class TestTrigger:
     async def test_the_first_candidate_whose_menu_opens_is_the_one_clicked(self):
-        # A menu opens only while candidate 2 is hovered, as on a page where
-        # candidate 0 is a header toggle.
+        # A menu opens only while the second candidate is hovered, as on a
+        # page where the first is a header toggle.
         page = FakePage(
             {
-                "candidates": [[0, 2]],
+                "candidates": [["t-0", "t-1"]],
                 "state": [_unpressed(), _pressed("LIKE")],
             }
         )
         page.answers["menu_open"] = lambda _: (
-            [call for call in page.calls if call[0] == "hover"][-1] == ("hover", 2)
+            [call for call in page.calls if call[0] == "hover"][-1] == ("hover", "t-1")
         )
 
         result = await _actions(page).react_to_post(POST, "like")
 
         assert result["status"] == "reacted"
         assert [c for c in page.calls if c[0] in {"hover", "click"}] == [
-            ("hover", 0),
-            ("hover", 2),
-            ("click", 2),
+            ("hover", "t-0"),
+            ("hover", "t-1"),
+            ("click", "t-1"),
         ]
-        assert page.evaluated("state") == [2, 2]
+        assert page.evaluated("state") == ["t-1", "t-1"]
 
     async def test_no_validated_trigger_is_unavailable_and_clicks_nothing(self):
         page = FakePage({"candidates": [[]]})
@@ -177,7 +186,7 @@ class TestTrigger:
         assert page.clicks() == []
 
     async def test_a_trigger_whose_menu_never_opens_is_not_used(self):
-        page = FakePage({"candidates": [[0]], "menu_open": [False]})
+        page = FakePage({"candidates": [["t-0"]], "menu_open": [False]})
 
         result = await _actions(page).react_to_post(POST, "celebrate")
 
@@ -207,14 +216,14 @@ class TestTrigger:
 
         await _actions(page).react_to_post(url, "like")
 
-        assert page.evaluated("candidates") == [expected]
+        assert page.evaluated("candidates") == [{"postId": expected, "token": "t"}]
 
 
 class TestConfirmation:
     async def test_like_without_a_readable_type_is_unknown_not_reacted(self):
         page = FakePage(
             {
-                "candidates": [[0]],
+                "candidates": [["t-0"]],
                 "menu_open": [True],
                 "state": [_unpressed(), _pressed(None)],
             }
@@ -224,12 +233,12 @@ class TestConfirmation:
 
         assert result["status"] == "outcome_unknown"
         assert result["retry_safe"] is False
-        assert [c for c in page.calls if c[0] == "click"] == [("click", 0)]
+        assert [c for c in page.calls if c[0] == "click"] == [("click", "t-0")]
 
     async def test_a_switch_that_shows_no_type_is_unknown_not_reacted(self):
         page = FakePage(
             {
-                "candidates": [[0]],
+                "candidates": [["t-0"]],
                 "menu_open": [True],
                 "state": [_pressed("PRAISE"), _pressed(None)],
                 "pick": ["clicked"],
@@ -240,12 +249,12 @@ class TestConfirmation:
 
         assert result["status"] == "outcome_unknown"
         assert result["retry_safe"] is False
-        assert page.evaluated("pick") == [{"index": 0, "type": "INTEREST"}]
+        assert page.evaluated("pick") == [{"ref": "t-0", "type": "INTEREST"}]
 
     async def test_a_switch_that_shows_the_old_type_is_unknown_not_reacted(self):
         page = FakePage(
             {
-                "candidates": [[0]],
+                "candidates": [["t-0"]],
                 "menu_open": [True],
                 "state": [_pressed("PRAISE")],
                 "pick": ["clicked"],
@@ -258,7 +267,7 @@ class TestConfirmation:
 
     async def test_like_already_pressed_clicks_nothing(self):
         page = FakePage(
-            {"candidates": [[0]], "menu_open": [True], "state": [_pressed("LIKE")]}
+            {"candidates": [["t-0"]], "menu_open": [True], "state": [_pressed("LIKE")]}
         )
 
         result = await _actions(page).react_to_post(POST, "like")
@@ -269,7 +278,7 @@ class TestConfirmation:
 
     async def test_a_pressed_trigger_with_no_readable_type_clicks_nothing(self):
         page = FakePage(
-            {"candidates": [[0]], "menu_open": [True], "state": [_pressed(None)]}
+            {"candidates": [["t-0"]], "menu_open": [True], "state": [_pressed(None)]}
         )
 
         result = await _actions(page).react_to_post(POST, "celebrate")
@@ -283,6 +292,89 @@ class TestConfirmation:
         assert page.clicks() == []
 
 
+class TestTag:
+    """The validated button is found by its tag, never by its position."""
+
+    async def test_a_tag_gone_before_the_like_click_clicks_nothing(self):
+        page = FakePage(
+            {"candidates": [["t-0"]], "menu_open": [True], "state": [_unpressed()]}
+        )
+        page.gone = {"t-0"}
+
+        result = await _actions(page).react_to_post(POST, "like")
+
+        assert result == {
+            "url": POST,
+            "status": "post_unavailable",
+            "reaction": "like",
+            "retry_safe": True,
+        }
+        assert page.clicks() == []
+
+    async def test_a_tag_gone_before_the_menu_pick_clicks_nothing(self):
+        page = FakePage(
+            {
+                "candidates": [["t-0"]],
+                "menu_open": [True],
+                "state": [_unpressed()],
+                "pick": ["gone"],
+            }
+        )
+
+        result = await _actions(page).react_to_post(POST, "celebrate")
+
+        assert result["status"] == "post_unavailable"
+        assert result["retry_safe"] is True
+
+    async def test_a_tag_gone_before_the_comment_button_is_unavailable(self):
+        page = FakePage(
+            {"candidates": [["t-0"]], "menu_open": [True], "comment_button": ["gone"]}
+        )
+        page.visible_editors = 0
+
+        result = await _actions(page).comment_on_post(POST, "Useful point.")
+
+        assert result == {"url": POST, "status": "post_unavailable", "retry_safe": True}
+        assert page.evaluated("write") == []
+
+    async def test_a_button_redrawn_after_the_click_is_tagged_again(self):
+        # LinkedIn may replace the button when the reaction lands. The one
+        # button that still passes the bar and post checks takes the tag back
+        # and its state confirms the reaction.
+        page = FakePage(
+            {
+                "candidates": [["t-0"]],
+                "menu_open": [True],
+                "state": [
+                    _unpressed(),
+                    {"hasTrigger": False},
+                    _pressed("LIKE"),
+                ],
+                "retag": [True],
+            }
+        )
+
+        result = await _actions(page).react_to_post(POST, "like")
+
+        assert result["status"] == "reacted"
+        assert page.evaluated("retag") == [{"postId": POST_ID, "ref": "t-0"}]
+
+    async def test_a_redrawn_button_that_cannot_be_tagged_is_unknown(self):
+        page = FakePage(
+            {
+                "candidates": [["t-0"]],
+                "menu_open": [True],
+                "state": [_unpressed(), {"hasTrigger": False}],
+                "retag": [False],
+            }
+        )
+
+        result = await _actions(page).react_to_post(POST, "like")
+
+        assert result["status"] == "outcome_unknown"
+        assert result["retry_safe"] is False
+
+
 def _moves_to_feed(page: FakePage) -> None:
     page.url = "https://www.linkedin.com/feed/"
 
@@ -290,7 +382,7 @@ def _moves_to_feed(page: FakePage) -> None:
 class TestAddress:
     async def test_a_move_off_the_post_after_load_stops_the_like_click(self):
         page = FakePage(
-            {"candidates": [[0]], "menu_open": [True], "state": [_unpressed()]}
+            {"candidates": [["t-0"]], "menu_open": [True], "state": [_unpressed()]}
         )
         page.on_hover = _moves_to_feed
 
@@ -306,12 +398,12 @@ class TestAddress:
 
     async def test_a_move_after_the_trigger_is_validated_stops_the_click(self):
         # The last check before the click, after the trigger passed its own.
-        def state_then_move(_index: int) -> dict[str, Any]:
+        def state_then_move(_ref: str) -> dict[str, Any]:
             _moves_to_feed(page)
             return _unpressed()
 
         page = FakePage(
-            {"candidates": [[0]], "menu_open": [True], "state": state_then_move}
+            {"candidates": [["t-0"]], "menu_open": [True], "state": state_then_move}
         )
 
         result = await _actions(page).react_to_post(POST, "like")
@@ -322,7 +414,7 @@ class TestAddress:
 
     async def test_a_move_off_the_post_after_load_stops_the_menu_pick(self):
         page = FakePage(
-            {"candidates": [[0]], "menu_open": [True], "state": [_unpressed()]}
+            {"candidates": [["t-0"]], "menu_open": [True], "state": [_unpressed()]}
         )
         page.on_hover = _moves_to_feed
 
@@ -336,7 +428,7 @@ class TestAddress:
         # lands between the Python check and the click still clicks nothing.
         page = FakePage(
             {
-                "candidates": [[0]],
+                "candidates": [["t-0"]],
                 "menu_open": [True],
                 "state": [_unpressed()],
                 "pick": ["moved"],
@@ -365,7 +457,7 @@ class TestAddress:
 
         page = FakePage(
             {
-                "candidates": [[0]],
+                "candidates": [["t-0"]],
                 "menu_open": [True],
                 "write": write,
                 "clear": [True],
@@ -384,7 +476,7 @@ class TestComment:
     async def test_a_comment_that_never_renders_is_unknown(self):
         page = FakePage(
             {
-                "candidates": [[0]],
+                "candidates": [["t-0"]],
                 "menu_open": [True],
                 "write": ["written"],
                 "submit": lambda click: "clicked" if click else "ready",
@@ -399,7 +491,11 @@ class TestComment:
 
     async def test_no_editor_after_the_comment_button_is_comments_disabled(self):
         page = FakePage(
-            {"candidates": [[0]], "menu_open": [True], "comment_button": ["clicked"]}
+            {
+                "candidates": [["t-0"]],
+                "menu_open": [True],
+                "comment_button": ["clicked"],
+            }
         )
         page.visible_editors = 0
         page.never_appear = {engage._EDITOR}
@@ -411,7 +507,7 @@ class TestComment:
             "status": "comments_disabled",
             "retry_safe": True,
         }
-        assert page.evaluated("comment_button") == [0]
+        assert page.evaluated("comment_button") == ["t-0"]
         assert page.evaluated("write") == []
 
 
