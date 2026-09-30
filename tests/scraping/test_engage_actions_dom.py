@@ -8,6 +8,9 @@ discipline ``tests/test_action_signals_dom.py`` applies to the connect flow: a
 decision that differs between two sets read a word, which the AGENTS.md
 Scraping Rules forbid.
 
+The fixture pages are hand-built from LinkedIn's known post-page structure,
+not saved from a live session; the live check is where a real page gets saved.
+
 No page here is on LinkedIn. The navigator stand-in serves the fixture from
 ``http://fixture.test`` under the path the action asked for, so the
 redirect guard sees a real address, and no request leaves the browser.
@@ -162,7 +165,15 @@ def _render(
     actor_href: str = "https://www.linkedin.com/in/jane-doe?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AAAA",
     actor_name: str = "Jane Doe",
     already: str | None = None,
+    follow_pressed: bool = False,
+    post_urn: str = "urn:li:activity:7123456789012345678",
+    repost_header: str = "",
+    silent: bool = False,
+    comments_enabled: bool = True,
+    move_on_hover: bool = False,
 ) -> str:
+    """Fill a fixture. ``already`` is a reaction type the post carries on
+    load, or ``"unreadable"`` for a pressed trigger whose icon names none."""
     values = {k: v for k, v in asdict(labels).items() if k != "locale"}
     values.update(
         comment_box_hidden="hidden" if comment_box_hidden else "",
@@ -175,9 +186,15 @@ def _render(
         pressed="true" if already else "false",
         trigger_icon=(
             f'<img data-test-reactions-icon-type="{already}" alt="">'
-            if already
+            if already and already != "unreadable"
             else '<svg aria-hidden="true"></svg>'
         ),
+        follow_attrs='aria-pressed="false"' if follow_pressed else "",
+        post_urn=post_urn,
+        repost_header=repost_header,
+        silent="true" if silent else "false",
+        comments_enabled="true" if comments_enabled else "false",
+        move_on_hover="true" if move_on_hover else "false",
     )
     return Template((FIXTURES / name).read_text(encoding="utf-8")).substitute(values)
 
@@ -236,9 +253,9 @@ async def _clicks(page: Any) -> list[str]:
 
 
 async def _react(
-    page: Any, labels: Labels, reaction: str, *, already: str | None = None
+    page: Any, labels: Labels, reaction: str, **variant: Any
 ) -> tuple[dict[str, Any], list[str], str | None]:
-    html = _render("post.html", labels, already=already)
+    html = _render("post.html", labels, **variant)
     actions = _engage(page, html)
     result = await actions.react_to_post(POST, reaction)
     now = await page.evaluate(
@@ -335,6 +352,119 @@ class TestReact:
             )
         )
 
+    async def test_a_pressed_follow_above_the_bar_is_never_the_trigger(self, dom_page):
+        # Follow carries aria-pressed and comes first in the document; like
+        # still lands on the post's own trigger, and Follow is never clicked.
+        answers = await _every_locale(
+            dom_page,
+            lambda page, labels: _react(page, labels, "like", follow_pressed=True),
+        )
+        assert answers == _same(
+            (
+                {
+                    "url": POST,
+                    "status": "reacted",
+                    "reaction": "like",
+                    "retry_safe": False,
+                },
+                ["react-trigger"],
+                "LIKE",
+            )
+        )
+
+    async def test_like_already_in_place_clicks_nothing(self, dom_page):
+        answers = await _every_locale(
+            dom_page,
+            lambda page, labels: _react(page, labels, "like", already="LIKE"),
+        )
+        assert answers == _same(
+            (
+                {
+                    "url": POST,
+                    "status": "already_reacted",
+                    "reaction": "like",
+                    "retry_safe": True,
+                },
+                [],
+                "LIKE",
+            )
+        )
+
+    async def test_a_pressed_trigger_with_no_readable_type_clicks_nothing(
+        self, dom_page
+    ):
+        answers = await _every_locale(
+            dom_page,
+            lambda page, labels: _react(
+                page, labels, "celebrate", already="unreadable"
+            ),
+        )
+        assert answers == _same(
+            (
+                {
+                    "url": POST,
+                    "status": "already_reacted",
+                    "reaction": None,
+                    "retry_safe": True,
+                },
+                [],
+                None,
+            )
+        )
+
+    async def test_a_reaction_the_page_never_shows_is_unknown(self, dom_page):
+        # One label set: the confirmation waits its full budget.
+        result, clicks, now = await _react(dom_page, ENGLISH, "celebrate", silent=True)
+
+        assert result == {
+            "url": POST,
+            "status": "outcome_unknown",
+            "reaction": "celebrate",
+            "retry_safe": False,
+        }
+        assert clicks == ["menu-PRAISE"]
+        assert now is None
+
+    async def test_a_move_to_the_feed_after_load_stops_before_any_click(self, dom_page):
+        # The page rewrites its own address to /feed/ when the trigger is
+        # hovered, keeping the post on screen. Nothing may be clicked.
+        answers = await _every_locale(
+            dom_page,
+            lambda page, labels: _react(page, labels, "like", move_on_hover=True),
+        )
+        assert answers == _same(
+            (
+                {
+                    "url": POST,
+                    "status": "post_unavailable",
+                    "reaction": "like",
+                    "retry_safe": True,
+                },
+                [],
+                None,
+            )
+        )
+
+    async def test_a_post_whose_urn_does_not_match_is_left_alone(self, dom_page):
+        answers = await _every_locale(
+            dom_page,
+            lambda page, labels: _react(
+                page, labels, "like", post_urn="urn:li:activity:5555555555555555555"
+            ),
+        )
+        assert answers == _same(
+            (
+                {
+                    "url": POST,
+                    "status": "post_unavailable",
+                    "reaction": "like",
+                    "retry_safe": True,
+                },
+                [],
+                None,
+            )
+        )
+
     async def test_a_post_redirected_away_is_unavailable_and_untouched(self, dom_page):
         actions = _engage(dom_page, _render("post.html", ENGLISH), serve_at="/feed/")
         result = await actions.react_to_post(POST, "like")
@@ -349,9 +479,11 @@ class TestReact:
 
 
 async def _comment(
-    page: Any, labels: Labels, *, hidden: bool = False, draft: str = ""
+    page: Any, labels: Labels, *, hidden: bool = False, draft: str = "", **variant: Any
 ) -> tuple[dict[str, Any], list[str], list[str], str]:
-    html = _render("post.html", labels, comment_box_hidden=hidden, draft=draft)
+    html = _render(
+        "post.html", labels, comment_box_hidden=hidden, draft=draft, **variant
+    )
     result = await _engage(page, html).comment_on_post(POST, COMMENT)
     posted = await page.evaluate(
         "Array.from(document.querySelectorAll('.new-comment')).map(e => e.innerText)"
@@ -389,6 +521,38 @@ class TestComment:
             )
         )
 
+    async def test_a_post_that_opens_no_editor_is_comments_disabled(self, dom_page):
+        answers = await _every_locale(
+            dom_page,
+            lambda page, labels: _comment(
+                page, labels, hidden=True, comments_enabled=False
+            ),
+        )
+        assert answers == _same(
+            (
+                {"url": POST, "status": "comments_disabled", "retry_safe": True},
+                ["comment-button"],
+                [],
+                "",
+            )
+        )
+
+    async def test_the_comment_button_is_found_past_a_pressed_follow(self, dom_page):
+        answers = await _every_locale(
+            dom_page,
+            lambda page, labels: _comment(
+                page, labels, hidden=True, follow_pressed=True
+            ),
+        )
+        assert answers == _same(
+            (
+                {"url": POST, "status": "commented", "retry_safe": False},
+                ["comment-button", "comment-submit"],
+                [COMMENT],
+                "",
+            )
+        )
+
     async def test_a_draft_in_the_box_is_left_alone(self, dom_page):
         answers = await _every_locale(
             dom_page,
@@ -413,7 +577,26 @@ class TestPostAuthor:
 
         answers = await _every_locale(dom_page, read)
         assert answers == _same(
-            {"url": POST, "name": "Jane Doe", "username": "jane-doe"}
+            {"url": POST, "status": "ok", "name": "Jane Doe", "username": "jane-doe"}
+        )
+
+    async def test_a_repost_is_credited_to_the_original_author(self, dom_page):
+        # The reposter's header links come first in the document, with plain
+        # text; the actor block below it is the author.
+        async def read(page, labels):
+            header = (
+                '<div class="update-components-header">'
+                '<a href="https://www.linkedin.com/in/reposter-person/">'
+                '<img alt=""></a><span>'
+                '<a href="https://www.linkedin.com/in/reposter-person/">'
+                "Rae Poster</a> " + labels.repost + "</span></div>"
+            )
+            html = _render("post.html", labels, repost_header=header)
+            return await _engage(page, html).get_post_author(POST)
+
+        answers = await _every_locale(dom_page, read)
+        assert answers == _same(
+            {"url": POST, "status": "ok", "name": "Jane Doe", "username": "jane-doe"}
         )
 
     async def test_a_company_post_has_no_username(self, dom_page):
@@ -425,7 +608,12 @@ class TestPostAuthor:
         )
         result = await _engage(dom_page, html).get_post_author(POST)
 
-        assert result == {"url": POST, "name": "Acme Robotics", "username": None}
+        assert result == {
+            "url": POST,
+            "status": "ok",
+            "name": "Acme Robotics",
+            "username": None,
+        }
 
 
 class TestConnectionState:

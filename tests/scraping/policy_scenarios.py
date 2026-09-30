@@ -1009,11 +1009,18 @@ async def _post_author_scenario() -> dict[str, Any]:
 
 async def _react_scenario() -> dict[str, Any]:
     # The one path that ends without a click: the requested reaction is
-    # already the post's reaction.
+    # already the post's reaction. The trigger is still validated first, by
+    # hovering the one candidate until its reactions menu shows.
     name = "react_to_post__already_reacted"
-    recorder = TraceRecorder(name, _COMMON_ALLOWED)
+    recorder = TraceRecorder(name, _COMMON_ALLOWED | {"locator.hover"})
     clock = FakeClock(recorder)
-    page = _page(recorder).script(
+    page = _page(recorder)
+    page.script("evaluate:post_trigger_candidates", [0])
+    page.declare_locator("main button[aria-pressed]", "react_triggers")
+    page.declare_derived("react_triggers", "nth:0", "react_trigger")
+    page.script("react_trigger.hover", None)
+    page.script("evaluate:post_reaction_menu_open", True)
+    page.script(
         "evaluate:post_reaction_state",
         {"hasTrigger": True, "pressed": True, "currentType": "PRAISE"},
     )

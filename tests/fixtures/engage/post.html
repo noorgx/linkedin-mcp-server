@@ -17,11 +17,25 @@
   comment editor, normally empty; $actor_href is the author link.
   $pressed and $trigger_icon give the post's reaction state on load: an
   outline icon when unreacted, the chosen reaction's icon once reacted.
+
+  Variants: $follow_attrs gives Follow an aria-pressed of its own;
+  $post_urn is the post container's data-urn; $repost_header is a
+  "reposted this" header above the actor block. In the script, $silent makes
+  reaction clicks change nothing (an action LinkedIn never confirms),
+  $comments_enabled false makes the Comment button open no editor, and
+  $move_on_hover moves the page to /feed/ in place, without a reload, the
+  first time the react trigger is hovered.
+
+  These pages are hand-built from how LinkedIn's post page is known to be
+  structured, not saved from a live session.
 -->
 <html>
 <head><meta charset="utf-8"><title>post</title></head>
 <body data-clicks="">
 <script>
+  const SILENT = $silent;
+  const COMMENTS_ENABLED = $comments_enabled;
+  const MOVE_ON_HOVER = $move_on_hover;
   function record(id) {
     const now = document.body.getAttribute('data-clicks');
     document.body.setAttribute('data-clicks', now ? now + ',' + id : id);
@@ -46,17 +60,23 @@
     }
   }
   function openMenu() {
+    if (MOVE_ON_HOVER && location.pathname !== '/feed/') {
+      history.pushState({}, '', '/feed/');
+    }
     document.querySelector('.reactions-menu').removeAttribute('hidden');
   }
   function pickReaction(type) {
+    if (SILENT) return;
     setReaction(type);
     document.querySelector('.reactions-menu').setAttribute('hidden', '');
   }
   function toggleLike() {
+    if (SILENT) return;
     const trigger = document.querySelector('[data-fixture-id="react-trigger"]');
     setReaction(trigger.getAttribute('aria-pressed') === 'true' ? null : 'LIKE');
   }
   function showCommentBox() {
+    if (!COMMENTS_ENABLED) return;
     document.querySelector('.comment-box').removeAttribute('hidden');
   }
   function editorChanged() {
@@ -80,14 +100,15 @@
 </script>
 <header><nav><a href="https://www.linkedin.com/feed/">$home</a></nav></header>
 <main>
-  <div class="feed-shared-update-v2" data-urn="urn:li:activity:7123456789012345678">
+  <div class="feed-shared-update-v2" data-urn="$post_urn">
+    $repost_header
     <div class="update-components-actor">
       <a class="actor-image" href="$actor_href"><img alt="$avatar_alt"></a>
       <a class="actor-meta" href="$actor_href">
         <span class="actor-title"><span dir="ltr"><span aria-hidden="true">$actor_name</span><span class="visually-hidden">$actor_name</span></span></span>
         <span class="actor-description"><span aria-hidden="true">$actor_headline</span></span>
       </a>
-      <button type="button" aria-label="$follow" data-fixture-id="follow">$follow</button>
+      <button type="button" aria-label="$follow" data-fixture-id="follow" $follow_attrs>$follow</button>
     </div>
     <div class="update-components-text"><p>$body</p></div>
     <div class="social-counts">

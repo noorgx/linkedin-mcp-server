@@ -89,12 +89,13 @@
       "call": "get_post_author",
       "kind": "evaluate",
       "operation": "post_author",
-      "program_digest": "9e48f09eb418",
+      "program_digest": "0d4e05a4d054",
       "section": "post"
     }
   ],
   "result": {
     "name": "Ada Lovelace",
+    "status": "ok",
     "url": "https://www.linkedin.com/feed/update/urn:li:activity:7123456789012345678/",
     "username": "ada-lovelace"
   },

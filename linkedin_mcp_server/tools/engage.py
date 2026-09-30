@@ -227,9 +227,11 @@ def register_engage_tools(
             ctx: FastMCP context for progress reporting
 
         Returns:
-            Dict with url, name and username. username is the author's /in/
-            username, or null for a company post. Both are null when the post
-            could not be read.
+            Dict with url, status, name and username. status is ok when an
+            author was read and unreadable when the post could not be read,
+            in which case name and username are null. username is the
+            author's /in/ username, or null for a company post. On a repost
+            the original post's author is read, not the member who reposted.
         """
         try:
             post_url = normalize_post_url(post_url)

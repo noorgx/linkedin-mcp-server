@@ -87,10 +87,49 @@
       "timeout_ms": 10000
     },
     {
+      "arg": "7123456789012345678",
+      "call": "react_to_post",
+      "kind": "evaluate",
+      "operation": "post_trigger_candidates",
+      "program_digest": "d6760d797301",
+      "section": "post"
+    },
+    {
+      "call": "react_to_post",
+      "kind": "locator.create",
+      "locator": "react_triggers",
+      "parent": null,
+      "section": "post",
+      "selector": "main button[aria-pressed]"
+    },
+    {
+      "call": "react_to_post",
+      "kind": "locator.derive",
+      "locator": "react_trigger",
+      "operation": "nth:0",
+      "parent": "react_triggers",
+      "section": "post"
+    },
+    {
+      "call": "react_to_post",
+      "kind": "locator.hover",
+      "locator": "react_trigger",
+      "section": "post",
+      "timeout_ms": 5000
+    },
+    {
+      "call": "react_to_post",
+      "kind": "evaluate",
+      "operation": "post_reaction_menu_open",
+      "program_digest": "717b9050a74c",
+      "section": "post"
+    },
+    {
+      "arg": 0,
       "call": "react_to_post",
       "kind": "evaluate",
       "operation": "post_reaction_state",
-      "program_digest": "97565b7e8e29",
+      "program_digest": "26055c918702",
       "section": "post"
     }
   ],
