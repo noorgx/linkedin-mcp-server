@@ -17,6 +17,7 @@ from linkedin_mcp_server.scraping.contracts import (
     rate_limited_section_error as rate_limited_section_error,
 )
 from linkedin_mcp_server.scraping.conversations import ConversationReader
+from linkedin_mcp_server.scraping.engage_actions import EngageActions
 from linkedin_mcp_server.scraping.feed import FeedScraper
 from linkedin_mcp_server.scraping.job_pages import JobPageReader
 from linkedin_mcp_server.scraping.jobs import JobScraper
@@ -62,6 +63,7 @@ class LinkedInExtractor:
             navigator,
             lambda username: self.scrape_person(username, {"main_profile"}),
         )
+        self._engage = EngageActions(session, navigator)
         job_pages = JobPageReader(session, navigator, content)
         self._jobs = JobScraper(navigator, capture, job_pages)
         self._posts = PostSearch(capture)
@@ -131,6 +133,22 @@ class LinkedInExtractor:
     ) -> dict[str, Any]:
         """Send a LinkedIn connection request or accept an incoming one."""
         return await self._connection.connect_with_person(username, note=note)
+
+    async def get_connection_state(self, username: str) -> dict[str, Any]:
+        """Read a profile's relationship state without clicking anything."""
+        return await self._connection.get_connection_state(username)
+
+    async def react_to_post(self, post_url: str, reaction: str) -> dict[str, Any]:
+        """Apply a reaction to a post, switching from another one if needed."""
+        return await self._engage.react_to_post(post_url, reaction)
+
+    async def comment_on_post(self, post_url: str, text: str) -> dict[str, Any]:
+        """Post a top-level comment on a post, exactly as given."""
+        return await self._engage.comment_on_post(post_url, text)
+
+    async def get_post_author(self, post_url: str) -> dict[str, Any]:
+        """Read the name and /in/ username of a post's author."""
+        return await self._engage.get_post_author(post_url)
 
     async def get_sidebar_profiles(self, username: str) -> dict[str, Any]:
         """Extract profile links from sidebar sections on a profile page."""

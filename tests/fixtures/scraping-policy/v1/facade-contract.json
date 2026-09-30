@@ -16,6 +16,10 @@
         "coroutine": true,
         "signature": "(self, text: 'str', *, scope: 'str' = 'main', timeout: 'int' = 5000) -> 'bool'"
       },
+      "comment_on_post": {
+        "coroutine": true,
+        "signature": "(self, post_url: 'str', text: 'str') -> 'dict[str, Any]'"
+      },
       "connect_with_person": {
         "coroutine": true,
         "signature": "(self, username: 'str', *, note: 'str | None' = None) -> 'dict[str, Any]'"
@@ -31,6 +35,10 @@
       "get_company_employees": {
         "coroutine": true,
         "signature": "(self, company_name: 'str', keywords: 'str | None' = None) -> 'dict[str, Any]'"
+      },
+      "get_connection_state": {
+        "coroutine": true,
+        "signature": "(self, username: 'str') -> 'dict[str, Any]'"
       },
       "get_conversation": {
         "coroutine": true,
@@ -48,6 +56,10 @@
         "coroutine": true,
         "signature": "(self) -> 'str'"
       },
+      "get_post_author": {
+        "coroutine": true,
+        "signature": "(self, post_url: 'str') -> 'dict[str, Any]'"
+      },
       "get_saved_jobs": {
         "coroutine": true,
         "signature": "(self, max_pages: 'int' = 3) -> 'dict[str, Any]'"
@@ -55,6 +67,10 @@
       "get_sidebar_profiles": {
         "coroutine": true,
         "signature": "(self, username: 'str') -> 'dict[str, Any]'"
+      },
+      "react_to_post": {
+        "coroutine": true,
+        "signature": "(self, post_url: 'str', reaction: 'str') -> 'dict[str, Any]'"
       },
       "scrape_company": {
         "coroutine": true,
@@ -94,15 +110,19 @@
       }
     },
     "tool_methods": [
+      "comment_on_post",
       "connect_with_person",
       "extract_feed",
       "extract_page",
       "get_company_employees",
+      "get_connection_state",
       "get_conversation",
       "get_inbox",
       "get_my_profile",
+      "get_post_author",
       "get_saved_jobs",
       "get_sidebar_profiles",
+      "react_to_post",
       "scrape_company",
       "scrape_job",
       "scrape_person",
@@ -118,6 +138,30 @@
         "input": {
           "additionalProperties": false,
           "properties": {},
+          "type": "object"
+        },
+        "output": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      "comment_on_post": {
+        "input": {
+          "additionalProperties": false,
+          "properties": {
+            "post_url": {
+              "description": "Post permalink, \"/feed/update/<urn>/\" or \"/posts/<slug>\",\nas a full URL or a relative path, or the post's urn",
+              "type": "string"
+            },
+            "text": {
+              "description": "Single-line comment text, posted exactly as given. No mention\nor hashtag suggestion is accepted. C0 control characters and\nDEL are rejected, including CR, LF and tab.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "post_url",
+            "text"
+          ],
           "type": "object"
         },
         "output": {
@@ -243,6 +287,25 @@
           },
           "required": [
             "company_name"
+          ],
+          "type": "object"
+        },
+        "output": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      "get_connection_state": {
+        "input": {
+          "additionalProperties": false,
+          "properties": {
+            "linkedin_username": {
+              "description": "LinkedIn username (e.g., \"stickerdaniel\"). A full\nprofile URL is accepted too and is reduced to the username.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "linkedin_username"
           ],
           "type": "object"
         },
@@ -433,6 +496,25 @@
           "type": "object"
         }
       },
+      "get_post_author": {
+        "input": {
+          "additionalProperties": false,
+          "properties": {
+            "post_url": {
+              "description": "Post permalink, \"/feed/update/<urn>/\" or \"/posts/<slug>\",\nas a full URL or a relative path, or the post's urn",
+              "type": "string"
+            }
+          },
+          "required": [
+            "post_url"
+          ],
+          "type": "object"
+        },
+        "output": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
       "get_saved_jobs": {
         "input": {
           "additionalProperties": false,
@@ -463,6 +545,30 @@
           },
           "required": [
             "linkedin_username"
+          ],
+          "type": "object"
+        },
+        "output": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      "react_to_post": {
+        "input": {
+          "additionalProperties": false,
+          "properties": {
+            "post_url": {
+              "description": "Post permalink, \"/feed/update/<urn>/\" or \"/posts/<slug>\",\nas a full URL or a relative path, or the post's urn",
+              "type": "string"
+            },
+            "reaction": {
+              "description": "One of like, celebrate, support, love, insightful, funny",
+              "type": "string"
+            }
+          },
+          "required": [
+            "post_url",
+            "reaction"
           ],
           "type": "object"
         },

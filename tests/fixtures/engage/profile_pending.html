@@ -1,0 +1,45 @@
+<!doctype html>
+<!--
+  A profile whose invitation is awaiting response. The top card mirrors the
+  pending_top_card builder in tests/test_action_signals_dom.py: the Pending
+  control is a labeled <a> beside the Message anchor and the unlabeled More
+  expander. A sidebar card for another member follows, carrying its own
+  invite anchor, so a read that strays out of the top card would say
+  connectable.
+
+  Every click anywhere is recorded on <body data-clicks>, so a read-only
+  probe that touches a control fails the test.
+-->
+<html>
+<head><meta charset="utf-8"><title>profile</title></head>
+<body data-clicks="">
+<script>
+  document.addEventListener('click', function (event) {
+    const hit = event.target.closest('a, button');
+    const id = hit ? (hit.getAttribute('data-fixture-id') || hit.tagName) : 'page';
+    const now = document.body.getAttribute('data-clicks');
+    document.body.setAttribute('data-clicks', now ? now + ',' + id : id);
+    event.preventDefault();
+  }, true);
+</script>
+<main>
+<section class="topcard">
+  <h1>Florian</h1>
+  <div class="actions">
+    <a href="/messaging/compose/?profileUrn=urn%3Ali%3Afsd_profile%3ADDD"
+      data-fixture-id="message">$message</a>
+    <a href="https://www.linkedin.com/in/testuser/" aria-label="$pending"
+      data-fixture-id="pending">$pending</a>
+    <button type="button" aria-expanded="false" data-fixture-id="more">$more</button>
+  </div>
+</section>
+<section class="sidebar">
+  <div class="card">
+    <a href="/in/someone-else/">Someone Else</a>
+    <a href="/preload/custom-invite/?vanityName=someone-else"
+      aria-label="$connect" data-fixture-id="sidebar-connect">$connect</a>
+  </div>
+</section>
+</main>
+</body>
+</html>

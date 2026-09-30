@@ -1,0 +1,88 @@
+{
+  "call": {
+    "arguments": {
+      "post_url": "https://www.linkedin.com/feed/update/urn:li:activity:7123456789012345678/",
+      "text": "Useful point."
+    },
+    "method": "comment_on_post"
+  },
+  "events": [
+    {
+      "call": "comment_on_post",
+      "callback_id": "callback-1",
+      "event": "framenavigated",
+      "kind": "listener.add",
+      "section": "post"
+    },
+    {
+      "call": "comment_on_post",
+      "extra": {
+        "target_url": "https://www.linkedin.com/feed/update/urn:li:activity:7123456789012345678/",
+        "wait_until": "domcontentloaded"
+      },
+      "kind": "boundary.trace",
+      "label": "extractor-before-goto",
+      "section": "post"
+    },
+    {
+      "call": "comment_on_post",
+      "kind": "navigate",
+      "landed_url": "https://www.linkedin.com/feed/",
+      "requested_url": "https://www.linkedin.com/feed/update/urn:li:activity:7123456789012345678/",
+      "section": "post",
+      "timeout_ms": 30000,
+      "wait_until": "domcontentloaded"
+    },
+    {
+      "call": "comment_on_post",
+      "description": "goto https://www.linkedin.com/feed/update/urn:li:activity:7123456789012345678/",
+      "kind": "boundary.stabilize",
+      "result": null,
+      "section": "post"
+    },
+    {
+      "call": "comment_on_post",
+      "extra": {
+        "target_url": "https://www.linkedin.com/feed/update/urn:li:activity:7123456789012345678/",
+        "wait_until": "domcontentloaded"
+      },
+      "kind": "boundary.trace",
+      "label": "extractor-after-goto",
+      "section": "post"
+    },
+    {
+      "call": "comment_on_post",
+      "kind": "boundary.auth_quick",
+      "result": null,
+      "section": "post"
+    },
+    {
+      "call": "comment_on_post",
+      "callback_id": "callback-1",
+      "event": "framenavigated",
+      "kind": "listener.remove",
+      "section": "post"
+    },
+    {
+      "call": "comment_on_post",
+      "kind": "boundary.rate_limit",
+      "section": "post"
+    },
+    {
+      "call": "comment_on_post",
+      "kind": "wait_for_selector",
+      "operation": "main",
+      "section": "post",
+      "selector": "main",
+      "state": "visible",
+      "timeout_ms": 10000
+    }
+  ],
+  "result": {
+    "retry_safe": true,
+    "status": "post_unavailable",
+    "url": "https://www.linkedin.com/feed/update/urn:li:activity:7123456789012345678/"
+  },
+  "scenario": "comment_on_post__redirected_away",
+  "schema_version": 1
+}

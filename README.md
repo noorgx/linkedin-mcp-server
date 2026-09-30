@@ -75,6 +75,10 @@ Use code <strong>FOUNDING20</strong> for 20% off your first year <a href="https:
 | `get_job_details` | Read the details of a LinkedIn job posting by its job ID. |
 | `get_feed` | Read recent home-feed posts, with links in `references`. |
 | `search_posts` | Search posts by keyword with optional recency filters; `references` contains unordered candidate post links. |
+| `react_to_post` | React to a post (like, celebrate, support, love, insightful, funny). |
+| `comment_on_post` | Post a top-level comment on a post, exactly as given. |
+| `get_connection_state` | Read the connection state with a person without clicking anything. |
+| `get_post_author` | Read a post author's name and `/in/` username (null for a company). |
 | `close_session` | Close the active browser session and release its resources. |
 
 <br/>

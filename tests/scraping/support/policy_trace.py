@@ -559,6 +559,9 @@ def semantic_selector_id(selector: str) -> str:
         "main": "main",
         "[role='menu']": "profile_more_menu",
         "main li label[aria-label]": "conversation_rows",
+        "main button[aria-pressed]": "post_react_trigger",
+        'main a[href*="/in/"], main a[href*="/company/"]': "post_author_link",
+        'main [role="textbox"][contenteditable="true"]': "comment_editor",
     }
     if selector in selectors:
         return selectors[selector]
@@ -607,6 +610,14 @@ def semantic_program_id(program: str) -> str:
         ("return inspect(target).status === 'valid'", "message_composer_ready"),
         ("submitUsable", "message_composer_state"),
         ("__linkedinMcpComposer =", "message_composer_owner"),
+        ("currentType: iconType(trigger)", "post_reaction_state"),
+        ("matches[0].click()", "post_reaction_pick"),
+        ("buttons.indexOf(trigger) + 1", "comment_button_open"),
+        ("norm(editor.innerText) === norm(text)", "comment_write"),
+        ("document.execCommand('delete'", "comment_clear"),
+        ("if (!click) return 'ready'", "comment_submit"),
+        ("slice(0, 60)", "comment_state"),
+        ("(in|company)", "post_author"),
         ("document.execCommand('insertText'", "message_composer_write"),
         ("return pinned.button.disabled", "message_submit_ready"),
         ("inputType: 'deleteContentBackward'", "message_composer_cleanup"),

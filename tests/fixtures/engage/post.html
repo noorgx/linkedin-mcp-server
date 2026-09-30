@@ -1,0 +1,138 @@
+<!doctype html>
+<!--
+  A single-post permalink page (/feed/update/<urn>/), reduced to the parts the
+  engagement actions touch. Structure follows LinkedIn's post detail page:
+  actor block (avatar anchor, then the meta anchor whose visible name sits in
+  an aria-hidden span beside a visually hidden copy), body, the social-counts
+  button carrying one reaction icon, the action bar (react trigger with
+  aria-pressed and its hover menu of six reaction buttons, then Comment,
+  Repost, Send), the comment box form and an existing comment with its own
+  react button.
+
+  Every visible string and aria-label value is a $placeholder filled from one
+  label set per run, so a decision that changes between sets read a word.
+  data-fixture-id exists only so the click recorder can name what was hit.
+
+  $comment_box_hidden is "hidden" or empty; $draft is text already in the
+  comment editor, normally empty; $actor_href is the author link.
+  $pressed and $trigger_icon give the post's reaction state on load: an
+  outline icon when unreacted, the chosen reaction's icon once reacted.
+-->
+<html>
+<head><meta charset="utf-8"><title>post</title></head>
+<body data-clicks="">
+<script>
+  function record(id) {
+    const now = document.body.getAttribute('data-clicks');
+    document.body.setAttribute('data-clicks', now ? now + ',' + id : id);
+  }
+  document.addEventListener('click', function (event) {
+    const hit = event.target.closest('[data-fixture-id]');
+    if (hit) record(hit.getAttribute('data-fixture-id'));
+  }, true);
+
+  function setReaction(type) {
+    const trigger = document.querySelector('[data-fixture-id="react-trigger"]');
+    const slot = trigger.querySelector('.icon-slot');
+    slot.innerHTML = '';
+    if (type) {
+      const img = document.createElement('img');
+      img.setAttribute('data-test-reactions-icon-type', type);
+      img.setAttribute('alt', '');
+      slot.appendChild(img);
+      trigger.setAttribute('aria-pressed', 'true');
+    } else {
+      trigger.setAttribute('aria-pressed', 'false');
+    }
+  }
+  function openMenu() {
+    document.querySelector('.reactions-menu').removeAttribute('hidden');
+  }
+  function pickReaction(type) {
+    setReaction(type);
+    document.querySelector('.reactions-menu').setAttribute('hidden', '');
+  }
+  function toggleLike() {
+    const trigger = document.querySelector('[data-fixture-id="react-trigger"]');
+    setReaction(trigger.getAttribute('aria-pressed') === 'true' ? null : 'LIKE');
+  }
+  function showCommentBox() {
+    document.querySelector('.comment-box').removeAttribute('hidden');
+  }
+  function editorChanged() {
+    const editor = document.querySelector('.comment-box [contenteditable]');
+    const submit = document.querySelector('[data-fixture-id="comment-submit"]');
+    if (editor.innerText.trim()) submit.removeAttribute('disabled');
+    else submit.setAttribute('disabled', '');
+  }
+  function postComment(event) {
+    event.preventDefault();
+    const editor = document.querySelector('.comment-box [contenteditable]');
+    const article = document.createElement('article');
+    article.className = 'comment new-comment';
+    const body = document.createElement('p');
+    body.textContent = editor.innerText.trim();
+    article.appendChild(body);
+    document.querySelector('.comments-list').prepend(article);
+    editor.innerHTML = '';
+    editorChanged();
+  }
+</script>
+<header><nav><a href="https://www.linkedin.com/feed/">$home</a></nav></header>
+<main>
+  <div class="feed-shared-update-v2" data-urn="urn:li:activity:7123456789012345678">
+    <div class="update-components-actor">
+      <a class="actor-image" href="$actor_href"><img alt="$avatar_alt"></a>
+      <a class="actor-meta" href="$actor_href">
+        <span class="actor-title"><span dir="ltr"><span aria-hidden="true">$actor_name</span><span class="visually-hidden">$actor_name</span></span></span>
+        <span class="actor-description"><span aria-hidden="true">$actor_headline</span></span>
+      </a>
+      <button type="button" aria-label="$follow" data-fixture-id="follow">$follow</button>
+    </div>
+    <div class="update-components-text"><p>$body</p></div>
+    <div class="social-counts">
+      <button type="button" aria-label="$counts" data-fixture-id="counts">
+        <img data-test-reactions-icon-type="PRAISE" alt=""> 42
+      </button>
+    </div>
+    <div class="social-actions">
+      <span class="reactions-react-button" onmouseenter="openMenu()">
+        <button type="button" aria-pressed="$pressed" aria-label="$react"
+          data-fixture-id="react-trigger" onclick="toggleLike()"
+          ><span class="icon-slot">$trigger_icon</span>$like</button>
+        <div class="reactions-menu" hidden>
+          <button type="button" aria-label="$like" data-fixture-id="menu-LIKE" onclick="pickReaction('LIKE')"><img data-test-reactions-icon-type="LIKE" alt=""></button>
+          <button type="button" aria-label="$celebrate" data-fixture-id="menu-PRAISE" onclick="pickReaction('PRAISE')"><img data-test-reactions-icon-type="PRAISE" alt=""></button>
+          <button type="button" aria-label="$support" data-fixture-id="menu-APPRECIATION" onclick="pickReaction('APPRECIATION')"><img data-test-reactions-icon-type="APPRECIATION" alt=""></button>
+          <button type="button" aria-label="$love" data-fixture-id="menu-EMPATHY" onclick="pickReaction('EMPATHY')"><img data-test-reactions-icon-type="EMPATHY" alt=""></button>
+          <button type="button" aria-label="$insightful" data-fixture-id="menu-INTEREST" onclick="pickReaction('INTEREST')"><img data-test-reactions-icon-type="INTEREST" alt=""></button>
+          <button type="button" aria-label="$funny" data-fixture-id="menu-ENTERTAINMENT" onclick="pickReaction('ENTERTAINMENT')"><img data-test-reactions-icon-type="ENTERTAINMENT" alt=""></button>
+        </div>
+      </span>
+      <button type="button" aria-label="$comment" data-fixture-id="comment-button" onclick="showCommentBox()">$comment</button>
+      <button type="button" aria-label="$repost" data-fixture-id="repost">$repost</button>
+      <button type="button" aria-label="$send" data-fixture-id="send">$send</button>
+    </div>
+    <div class="comments">
+      <form class="comment-box" onsubmit="postComment(event)" $comment_box_hidden>
+        <div class="editor-container">
+          <div role="textbox" contenteditable="true" aria-multiline="true"
+            aria-placeholder="$placeholder" data-fixture-id="comment-editor"
+            oninput="editorChanged()">$draft</div>
+        </div>
+        <button type="button" aria-label="$emoji" data-fixture-id="emoji">:)</button>
+        <button type="submit" disabled data-fixture-id="comment-submit">$post</button>
+      </form>
+      <div class="comments-list">
+        <article class="comment">
+          <a href="https://www.linkedin.com/in/other-person/"><span aria-hidden="true">Other Person</span></a>
+          <p>$existing_comment</p>
+          <button type="button" aria-pressed="false" aria-label="$react"
+            data-fixture-id="comment-react">$like</button>
+        </article>
+      </div>
+    </div>
+  </div>
+</main>
+</body>
+</html>

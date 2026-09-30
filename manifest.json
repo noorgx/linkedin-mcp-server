@@ -120,6 +120,22 @@
       "description": "Search LinkedIn posts/content globally by keyword (the 'Posts' tab) with an optional recency filter (past-24h/past-week/past-month); returns unordered candidate permalinks in references"
     },
     {
+      "name": "react_to_post",
+      "description": "React to a LinkedIn post (like, celebrate, support, love, insightful, funny); a write operation"
+    },
+    {
+      "name": "comment_on_post",
+      "description": "Post a single-line top-level comment on a LinkedIn post exactly as given; a write operation"
+    },
+    {
+      "name": "get_connection_state",
+      "description": "Read the connection state with a person (pending, already_connected, connectable, follow_only, incoming_request, unavailable) without clicking"
+    },
+    {
+      "name": "get_post_author",
+      "description": "Read the name and /in/ username of a post's author (username null for company posts)"
+    },
+    {
       "name": "close_session",
       "description": "Properly close browser session and clean up resources"
     }

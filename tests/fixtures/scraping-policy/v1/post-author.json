@@ -1,0 +1,103 @@
+{
+  "call": {
+    "arguments": {
+      "post_url": "https://www.linkedin.com/feed/update/urn:li:activity:7123456789012345678/"
+    },
+    "method": "get_post_author"
+  },
+  "events": [
+    {
+      "call": "get_post_author",
+      "callback_id": "callback-1",
+      "event": "framenavigated",
+      "kind": "listener.add",
+      "section": "post"
+    },
+    {
+      "call": "get_post_author",
+      "extra": {
+        "target_url": "https://www.linkedin.com/feed/update/urn:li:activity:7123456789012345678/",
+        "wait_until": "domcontentloaded"
+      },
+      "kind": "boundary.trace",
+      "label": "extractor-before-goto",
+      "section": "post"
+    },
+    {
+      "call": "get_post_author",
+      "kind": "navigate",
+      "landed_url": "https://www.linkedin.com/feed/update/urn:li:activity:7123456789012345678/",
+      "requested_url": "https://www.linkedin.com/feed/update/urn:li:activity:7123456789012345678/",
+      "section": "post",
+      "timeout_ms": 30000,
+      "wait_until": "domcontentloaded"
+    },
+    {
+      "call": "get_post_author",
+      "description": "goto https://www.linkedin.com/feed/update/urn:li:activity:7123456789012345678/",
+      "kind": "boundary.stabilize",
+      "result": null,
+      "section": "post"
+    },
+    {
+      "call": "get_post_author",
+      "extra": {
+        "target_url": "https://www.linkedin.com/feed/update/urn:li:activity:7123456789012345678/",
+        "wait_until": "domcontentloaded"
+      },
+      "kind": "boundary.trace",
+      "label": "extractor-after-goto",
+      "section": "post"
+    },
+    {
+      "call": "get_post_author",
+      "kind": "boundary.auth_quick",
+      "result": null,
+      "section": "post"
+    },
+    {
+      "call": "get_post_author",
+      "callback_id": "callback-1",
+      "event": "framenavigated",
+      "kind": "listener.remove",
+      "section": "post"
+    },
+    {
+      "call": "get_post_author",
+      "kind": "boundary.rate_limit",
+      "section": "post"
+    },
+    {
+      "call": "get_post_author",
+      "kind": "wait_for_selector",
+      "operation": "main",
+      "section": "post",
+      "selector": "main",
+      "state": "visible",
+      "timeout_ms": 10000
+    },
+    {
+      "call": "get_post_author",
+      "kind": "wait_for_selector",
+      "operation": "post_author_link",
+      "section": "post",
+      "selector": "main a[href*=\"/in/\"], main a[href*=\"/company/\"]",
+      "state": "attached",
+      "timeout_ms": 10000
+    },
+    {
+      "call": "get_post_author",
+      "kind": "evaluate",
+      "operation": "post_author",
+      "program_digest": "9e48f09eb418",
+      "section": "post"
+    }
+  ],
+  "result": {
+    "name": "Ada Lovelace",
+    "url": "https://www.linkedin.com/feed/update/urn:li:activity:7123456789012345678/",
+    "username": "ada-lovelace"
+  },
+  "scenario": "get_post_author__member",
+  "schema_version": 1
+}

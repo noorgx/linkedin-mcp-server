@@ -714,6 +714,23 @@ class ConnectionActions:
         await self._dismiss_dialog()
         return note_limit_message
 
+    async def get_connection_state(self, username: str) -> dict[str, Any]:
+        """Read the relationship state for a profile without touching it.
+
+        The same main-profile read and structural probe ``connect_with_person``
+        starts with, and nothing after them: no More menu, no deeplink, no
+        click. A profile whose Connect sits only under More therefore reads
+        ``follow_only`` here, where ``connect_with_person`` would open the menu
+        and find it.
+        """
+        username = normalize_person_identifier(username)
+        url = person_profile_url(username, "/")
+        profile = await self._read_main_profile(username)
+        if not profile.get("sections", {}).get("main_profile", ""):
+            return {"url": url, "state": "unavailable"}
+        signals = await self._read_action_signals(username)
+        return {"url": url, "state": connection.detect_connection_state(signals)}
+
     async def connect_with_person(
         self,
         username: str,
