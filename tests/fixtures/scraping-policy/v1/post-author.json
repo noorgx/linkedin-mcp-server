@@ -89,7 +89,7 @@
       "call": "get_post_author",
       "kind": "evaluate",
       "operation": "post_author",
-      "program_digest": "5d3ae03e7eac",
+      "program_digest": "54148af5fcd8",
       "section": "post"
     }
   ],

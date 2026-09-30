@@ -61,6 +61,8 @@ class FakeLocator:
 
     async def hover(self, *, timeout: int | None = None) -> None:
         self._page.calls.append(("hover", self._ref))
+        if self._ref in self._page.hover_fails:
+            raise PlaywrightTimeoutError(f"{self._selector} is gone")
         if self._page.on_hover is not None:
             self._page.on_hover(self._page)
 
@@ -86,6 +88,7 @@ class FakePage:
         self.on_click: Callable[[FakePage], None] | None = None
         self.never_appear: set[str] = set()
         self.gone: set[str] = set()
+        self.hover_fails: set[str] = set()
 
     async def evaluate(self, program: str, arg: Any = None) -> Any:
         name = _BY_SOURCE[program]
@@ -205,6 +208,14 @@ class TestTrigger:
             (
                 "https://www.linkedin.com/posts/jane_ai-activity-7123456789012345678-AbCd",
                 POST_ID,
+            ),
+            (
+                "https://www.linkedin.com/posts/jane_ai-ugcPost-7123456789012345679-XyZw",
+                "7123456789012345679",
+            ),
+            (
+                "https://www.linkedin.com/posts/jane_ai-share-7510371678175096832-QrSt",
+                "7510371678175096832",
             ),
             ("https://www.linkedin.com/posts/jane_ai-note", None),
         ],
@@ -357,7 +368,43 @@ class TestTag:
         result = await _actions(page).react_to_post(POST, "like")
 
         assert result["status"] == "reacted"
-        assert page.evaluated("retag") == [{"postId": POST_ID, "ref": "t-0"}]
+        assert page.evaluated("retag") == [
+            {"postId": POST_ID, "ref": "t-0", "rejected": []}
+        ]
+
+    async def test_a_redraw_never_hands_the_tag_to_a_rejected_follow(self):
+        # Follow is the first candidate and fails the hover check. After the
+        # like click the trigger is redrawn and Follow is the only button the
+        # re-tag could match: the re-tag is told Follow was rejected, finds
+        # nothing it may tag, and the outcome stays unknown.
+        page = FakePage(
+            {
+                "candidates": [["t-0", "t-1"]],
+                "state": [_unpressed(), {"hasTrigger": False}],
+            }
+        )
+        page.answers["menu_open"] = lambda _: (
+            [call for call in page.calls if call[0] == "hover"][-1] == ("hover", "t-1")
+        )
+        tagged: list[str] = []
+
+        def retag(arg: dict[str, Any]) -> bool:
+            # The page side: the only match is Follow ("t-0"), which it must
+            # skip because it is on the rejected list.
+            if "t-0" in arg["rejected"]:
+                return False
+            tagged.append("t-0")
+            return True
+
+        page.answers["retag"] = retag
+
+        result = await _actions(page).react_to_post(POST, "like")
+
+        assert result["status"] == "outcome_unknown"
+        assert result["retry_safe"] is False
+        assert tagged == []
+        assert all(arg["rejected"] == ["t-0"] for arg in page.evaluated("retag"))
+        assert [c for c in page.calls if c[0] == "click"] == [("click", "t-1")]
 
     async def test_a_redrawn_button_that_cannot_be_tagged_is_unknown(self):
         page = FakePage(
@@ -373,6 +420,30 @@ class TestTag:
 
         assert result["status"] == "outcome_unknown"
         assert result["retry_safe"] is False
+
+
+class TestHoverFailure:
+    async def test_a_tag_that_vanishes_under_the_hover_is_unavailable(self):
+        page = FakePage({"candidates": [["t-0"]]})
+        page.hover_fails = {"t-0"}
+
+        result = await _actions(page).react_to_post(POST, "like")
+
+        assert result == {
+            "url": POST,
+            "status": "post_unavailable",
+            "reaction": "like",
+            "retry_safe": True,
+        }
+        assert page.clicks() == []
+
+    async def test_the_comment_flow_treats_it_the_same(self):
+        page = FakePage({"candidates": [["t-0"]]})
+        page.hover_fails = {"t-0"}
+
+        result = await _actions(page).comment_on_post(POST, "Useful point.")
+
+        assert result == {"url": POST, "status": "post_unavailable", "retry_safe": True}
 
 
 def _moves_to_feed(page: FakePage) -> None:

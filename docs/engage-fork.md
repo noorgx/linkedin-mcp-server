@@ -46,8 +46,8 @@ the two write tools, like every other tool that is not `readOnlyHint`.
 - The address has to stay a post permalink: after the load, after the post
   appears, and again inside every click program. A post that moves itself to
   `/feed/` after loading is `post_unavailable` with nothing clicked.
-- When the URL names a post id (the urn's number, or the `activity-<id>` in a
-  `/posts/` slug), the react button's nearest `[data-urn]` container has to
+- When the URL names a post id (the urn's number, or the `activity-<id>`,
+  `ugcPost-<id>` or `share-<id>` in a `/posts/` slug), the react button's nearest `[data-urn]` container has to
   carry that id in an attribute of its own or of an element inside it.
   Otherwise the result is `post_unavailable`, `retry_safe` true.
 - The react button has to sit in an action bar that holds no other
@@ -59,10 +59,13 @@ the two write tools, like every other tool that is not `readOnlyHint`.
   and every later step (hover, state reads, the like click, the menu pick, the
   Comment button) finds the button by that tag, never by its position, so a
   toggle that renders later earlier in the page cannot take its place. A tag
-  gone before a click gives `post_unavailable` with nothing clicked. If
-  LinkedIn redraws the button after the click, the tag goes back only to the
-  one button that still passes the bar and post checks; otherwise the result
-  stays `outcome_unknown`.
+  gone before a click, or a hover that fails because the tagged button
+  vanished, gives `post_unavailable` with nothing clicked. If LinkedIn redraws
+  the button after the click, the tag goes back only to the one button that
+  still passes the bar and post checks, holds a complete reactions menu in its
+  own action bar (read from the page without hovering), and was not rejected
+  by the hover check earlier in the call; otherwise the result stays
+  `outcome_unknown`.
 
 ## Selectors
 

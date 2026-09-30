@@ -29,8 +29,10 @@ does not translate:
   position among ``button[aria-pressed]`` would shift when LinkedIn renders
   another such button earlier in the page, and the click would land on it.
   A tag gone before a click means nothing is clicked. One gone after the
-  click (LinkedIn may redraw the button) goes back to the one button that
-  still passes checks 1 and 2, or the outcome stays unknown.
+  click (LinkedIn may redraw the button) goes back only to the one button
+  that still passes checks 1 and 2, has a complete reactions menu inside its
+  own action bar (read from the page, hovered or not), and was not rejected by
+  the hover check earlier in the call. Otherwise the outcome stays unknown.
 
 * the comment editor is the first visible ``[role=textbox][contenteditable]``
   in ``<main>`` outside a dialog, and its Post button is the one
@@ -91,10 +93,10 @@ _POST_PATH_PREFIXES = ("/feed/update/", "/posts/")
 _REACT_TRIGGER = "main button[aria-pressed]"
 _EDITOR = 'main [role="textbox"][contenteditable="true"]'
 
-# The post id a permalink names: the urn's number, or the activity number a
-# /posts/ slug ends with.
+# The post id a permalink names: the urn's number, or the activity, ugcPost
+# or share number a /posts/ slug ends with.
 _URN_ID = re.compile(r"urn:li:(?:activity|share|ugcPost):([0-9]+)")
-_SLUG_ID = re.compile(r"activity-([0-9]+)")
+_SLUG_ID = re.compile(r"(?:activity|ugcPost|share)-([0-9]+)")
 
 # Budgets. The page is already loaded when each starts, so they cover LinkedIn
 # rendering a control or committing an action, not a navigation.
@@ -149,7 +151,7 @@ const ofPost = (trigger, postId) => {
   }
   return false;
 };
-const findBar = (main, trigger) => {
+const barOf = (main, trigger) => {
   const plain = b => b === trigger || (visible(b) && !b.querySelector(ICON));
   let el = trigger.parentElement;
   while (el && el !== main.parentElement) {
@@ -158,11 +160,15 @@ const findBar = (main, trigger) => {
       const others = Array.from(el.querySelectorAll('button[aria-pressed]')).filter(
         b => b !== trigger && !isMenuItem(b)
       );
-      return others.length === 0 ? buttons : null;
+      return others.length === 0 ? {el, buttons} : null;
     }
     el = el.parentElement;
   }
   return null;
+};
+const findBar = (main, trigger) => {
+  const bar = barOf(main, trigger);
+  return bar ? bar.buttons : null;
 };
 const findEditor = main => {
   for (const el of main.querySelectorAll('[role="textbox"][contenteditable="true"]')) {
@@ -195,8 +201,11 @@ TRIGGER_CANDIDATES_JS = (
 """
 )
 
-# Give the tag back after LinkedIn redrew the validated button: only when
-# exactly one button passes the bar and post checks. True when tagged.
+# Give the tag back after LinkedIn redrew the validated button. A button
+# qualifies only when it passes the bar and post checks, holds a complete
+# reactions menu inside its own action bar (read from the page, visible or
+# not, since no hover happens here), and does not carry a ref the hover check
+# rejected earlier in the call. Exactly one must qualify. True when tagged.
 RETAG_TRIGGER_JS = (
     r"""
 ((arg) => {
@@ -205,7 +214,15 @@ RETAG_TRIGGER_JS = (
     + r"""
   const main = document.querySelector('main');
   if (!main) return false;
-  const found = triggers(main).filter(b => findBar(main, b) && ofPost(b, arg.postId));
+  const rejected = new Set(arg.rejected || []);
+  const menuInBar = bar => Array.from(bar.el.querySelectorAll('button')).some(
+    b => oneIcon(b) && !!menuOf(b)
+  );
+  const found = triggers(main).filter(b => {
+    if (rejected.has(b.getAttribute('data-engage-ref'))) return false;
+    const bar = barOf(main, b);
+    return !!bar && ofPost(b, arg.postId) && menuInBar(bar);
+  });
   if (found.length !== 1) return false;
   found[0].setAttribute('data-engage-ref', arg.ref);
   return true;
@@ -538,28 +555,36 @@ class EngageActions:
                 return False
             await asyncio.sleep(_POLL)
 
-    async def _find_trigger(self, post_url: str) -> str | None:
-        """The tag of the post's react trigger, validated by its menu.
+    async def _find_trigger(self, post_url: str) -> tuple[str | None, list[str]]:
+        """The tag of the post's react trigger, validated by its menu, and
+        the tags the hover check rejected on the way.
 
         Every candidate is tagged, then hovered by its tag in document order,
         and the first one that opens a complete reactions menu is the
-        trigger. None when no candidate does, or when the page leaves the
-        post meanwhile.
+        trigger. None when no candidate does, when the page leaves the post
+        meanwhile, or when a hover fails (the tagged button is gone). A hover
+        clicks nothing, so each of these is safe to report as unavailable.
         """
         page = self._session.page
+        rejected: list[str] = []
         refs = await page.evaluate(
             TRIGGER_CANDIDATES_JS,
             {"postId": post_id(post_url), "token": _new_token()},
         )
         if not isinstance(refs, list):
-            return None
+            return None, rejected
         for ref in refs:
             if not isinstance(ref, str) or not self._on_post():
-                return None
-            await page.locator(_ref_selector(ref)).hover(timeout=5000)
+                return None, rejected
+            try:
+                await page.locator(_ref_selector(ref)).hover(timeout=5000)
+            except Exception:
+                logger.debug("React candidate %s could not be hovered", ref)
+                return None, rejected
             if await self._menu_opens():
-                return ref if self._on_post() else None
-        return None
+                return (ref if self._on_post() else None), rejected
+            rejected.append(ref)
+        return None, rejected
 
     async def _post_state(self, ref: str) -> dict[str, Any]:
         state = await self._session.page.evaluate(POST_STATE_JS, ref)
@@ -579,14 +604,14 @@ class EngageActions:
             await asyncio.sleep(_POLL)
 
     async def _reaction_confirmed(
-        self, ref: str, reaction_type: str, post_url: str
+        self, ref: str, reaction_type: str, post_url: str, rejected: list[str]
     ) -> bool:
         """Wait for the trigger to show exactly the requested reaction.
 
         A pressed trigger naming no type proves nothing about which reaction
         landed, so it never confirms. A trigger LinkedIn redrew loses its
-        tag; the tag goes back only to the one button that still passes the
-        bar and post checks.
+        tag; ``RETAG_TRIGGER_JS`` gives it back only to a button with a
+        reactions menu in its own bar that the hover check did not reject.
         """
         deadline = self._session.monotonic() + _CONFIRM_TIMEOUT
         while True:
@@ -595,7 +620,8 @@ class EngageActions:
                 return True
             if not state.get("hasTrigger"):
                 await self._session.page.evaluate(
-                    RETAG_TRIGGER_JS, {"postId": post_id(post_url), "ref": ref}
+                    RETAG_TRIGGER_JS,
+                    {"postId": post_id(post_url), "ref": ref, "rejected": rejected},
                 )
             if self._session.monotonic() >= deadline:
                 return False
@@ -620,7 +646,7 @@ class EngageActions:
 
         if not await self._load_post(post_url) or not await self._post_is_shown():
             return unavailable()
-        ref = await self._find_trigger(post_url)
+        ref, rejected = await self._find_trigger(post_url)
         if ref is None:
             return unavailable()
 
@@ -660,7 +686,7 @@ class EngageActions:
                         post_url, "react_failed", reaction, retry_safe=True
                     )
 
-            if await self._reaction_confirmed(ref, reaction_type, post_url):
+            if await self._reaction_confirmed(ref, reaction_type, post_url, rejected):
                 return _react_result(post_url, "reacted", reaction, retry_safe=False)
             return _react_result(
                 post_url, "outcome_unknown", reaction, retry_safe=False
@@ -741,7 +767,7 @@ class EngageActions:
 
         if not await self._load_post(post_url) or not await self._post_is_shown():
             return unavailable()
-        ref = await self._find_trigger(post_url)
+        ref, _rejected = await self._find_trigger(post_url)
         if ref is None:
             return unavailable()
         opened = await self._open_editor(ref)
